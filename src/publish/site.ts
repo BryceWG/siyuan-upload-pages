@@ -1,3 +1,6 @@
+import { blake3 } from "@noble/hashes/blake3";
+import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils";
+
 export interface SiteFile {
     /** Site path, always starting with `/`, e.g. `/index.html`. */
     path: string;
@@ -14,6 +17,19 @@ export interface BuiltSite {
 
 export const totalSize = (files: SiteFile[]): number =>
     files.reduce((sum, file) => sum + file.bytes.length, 0);
+
+/**
+ * Digest of everything the site consists of: two builds with the same
+ * fingerprint would upload byte-identical files, so an equal fingerprint means
+ * the published page does not need a new deployment. Hashing is two level
+ * (per file, then over `path:hash` lines) to stay cheap on large assets.
+ */
+export function siteFingerprint(files: SiteFile[]): string {
+    const lines = [...files]
+        .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+        .map((file) => `${file.path}:${bytesToHex(blake3(file.bytes))}`);
+    return bytesToHex(blake3(utf8ToBytes(lines.join("\n"))));
+}
 
 export const formatSize = (bytes: number): string => {
     if (bytes < 1024) {

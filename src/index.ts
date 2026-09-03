@@ -1,13 +1,17 @@
 import { Plugin, Menu, showMessage, getFrontend, getAllEditor } from "siyuan";
 import "./index.scss";
 
+import { confirmDialog } from "./libs/dialog";
 import { SettingUtils } from "./libs/setting-utils";
+import { openRecordsDialog } from "./records-dialog";
 import { buildSinglePageSite } from "./publish/site-builder";
 import { ProviderConfig, ProviderId, PublishTarget, createTarget } from "./publish/provider";
+import { PublishRecord, RecordStore } from "./publish/records";
 
-import { formatSize, totalSize } from "./publish/site";
+import { formatSize, siteFingerprint, totalSize } from "./publish/site";
 
 const STORAGE_NAME = "publish-config";
+const RECORDS_NAME = "publish-records";
 
 const CLOUDFLARE_KEYS = ["accountId", "projectName", "apiToken", "branch"];
 const VERCEL_KEYS = ["vercelToken", "vercelProject", "vercelTeamId", "vercelTarget"];
@@ -16,6 +20,7 @@ export default class PublishPlugin extends Plugin {
 
 
     private settingUtils: SettingUtils;
+    private records = new RecordStore(this, RECORDS_NAME);
     private publishing = false;
     private isMobile: boolean;
 
@@ -42,6 +47,9 @@ export default class PublishPlugin extends Plugin {
         this.settingUtils.load().catch((error) => {
             console.error("[publish-pages] failed to load settings", error);
         });
+        this.records.load().catch((error) => {
+            console.error("[publish-pages] failed to load publish records", error);
+        });
 
         this.addTopBar({
             icon: "iconPublishPages",
@@ -53,6 +61,11 @@ export default class PublishPlugin extends Plugin {
                     icon: "iconPublishPages",
                     label: this.i18n.publishCurrentDoc,
                     click: () => this.publishCurrentDoc(),
+                });
+                menu.addItem({
+                    icon: "iconLink",
+                    label: this.i18n.manageRecords,
+                    click: () => this.showRecordsDialog(),
                 });
                 menu.addItem({
                     icon: "iconSettings",
@@ -180,6 +193,18 @@ export default class PublishPlugin extends Plugin {
             },
         });
 
+        this.settingUtils.addItem({
+            key: "manageRecords",
+            value: "",
+            type: "button",
+            title: this.i18n.settingManageRecords,
+            description: this.i18n.settingManageRecordsDesc,
+            button: {
+                label: this.i18n.settingManageRecordsLabel,
+                callback: () => this.showRecordsDialog(),
+            },
+        });
+
     }
 
     /**
@@ -221,8 +246,11 @@ export default class PublishPlugin extends Plugin {
         this.applyProviderVisibility();
     }
 
-    private providerConfig(): ProviderConfig {
-        const provider = this.selectedProvider();
+    /**
+     * Reads the settings of `provider`, defaulting to the selected one — a
+     * record can be managed even when its channel is not currently selected.
+     */
+    private providerConfig(provider: ProviderId = this.selectedProvider()): ProviderConfig {
 
         if (provider === "vercel") {
 
@@ -286,6 +314,7 @@ export default class PublishPlugin extends Plugin {
             return;
         }
 
+        const provider = this.selectedProvider();
         const target = createTarget(this.providerConfig());
         const invalid = target.validate();
         if (invalid) {
@@ -296,8 +325,6 @@ export default class PublishPlugin extends Plugin {
 
         this.publishing = true;
         try {
-            await this.ensureProject(target);
-
             showMessage(this.i18n.buildingSite, 4000);
 
             const site = await buildSinglePageSite(docId, {
@@ -310,6 +337,18 @@ export default class PublishPlugin extends Plugin {
                 showMessage(`${this.i18n.buildWarnings}: ${site.warnings.length}`, 6000);
             }
 
+            // The record check needs the built content: an equal fingerprint
+            // means the existing deployment already serves exactly this page.
+            const fingerprint = siteFingerprint(site.files);
+            const record = this.records.find(provider, docId);
+            if (record && record.fingerprint === fingerprint) {
+                copyToClipboard(record.url);
+                showMessage(`${this.i18n.recordUnchanged}: ${record.url}`, 0);
+                return;
+            }
+
+            await this.ensureProject(target);
+
             showMessage(
                 `${this.i18n.uploading}: ${site.files.length} / ${formatSize(totalSize(site.files))}`,
                 4000,
@@ -317,8 +356,18 @@ export default class PublishPlugin extends Plugin {
 
             const result = await target.deploy(site.files, (message) => showMessage(message, 3000));
 
-            navigator.clipboard?.writeText(result.url).catch(() => { });
-            showMessage(`${this.i18n.publishOk}: ${result.url}`, 0);
+            const { created } = await this.records.upsert({
+                docId,
+                docName: site.title,
+                provider,
+                deploymentId: result.id,
+                url: result.url,
+                fingerprint,
+            });
+
+            copyToClipboard(result.url);
+            const message = created ? this.i18n.publishOk : this.i18n.publishUpdatedOk;
+            showMessage(`${message}: ${result.url}`, 0);
         } catch (error) {
             showMessage(`${this.i18n.publishFailed}: ${errorMessage(error)}`, 0, "error");
         } finally {
@@ -326,8 +375,88 @@ export default class PublishPlugin extends Plugin {
         }
     }
 
+    // --------------------------------------------------------------- records
+
+    private showRecordsDialog(): void {
+        openRecordsDialog(
+            {
+                title: this.i18n.recordsTitle,
+                empty: this.i18n.recordsEmpty,
+                colDoc: this.i18n.recordsColDoc,
+                colProvider: this.i18n.recordsColProvider,
+                colPublishedAt: this.i18n.recordsColPublishedAt,
+                colUpdatedAt: this.i18n.recordsColUpdatedAt,
+                colActions: this.i18n.recordsColActions,
+                actionCopyLink: this.i18n.recordsActionCopyLink,
+                actionCopyId: this.i18n.recordsActionCopyId,
+                actionDelete: this.i18n.recordsActionDelete,
+            },
+            {
+                records: () => this.records.all(),
+                onCopyLink: (record) => {
+                    copyToClipboard(record.url);
+                    showMessage(this.i18n.recordsCopyOk, 3000);
+                },
+                onCopyId: (record) => {
+                    copyToClipboard(record.docId);
+                    showMessage(this.i18n.recordsCopyIdOk, 3000);
+                },
+                onDelete: (record) => this.deletePublish(record),
+            },
+        );
+    }
+
+    /** Deletes the remote deployment, then the local record. */
+    private async deletePublish(record: PublishRecord): Promise<boolean> {
+        const target = createTarget(this.providerConfig(record.provider));
+        const invalid = target.validate();
+        if (invalid) {
+            // Without the channel credentials the deployment cannot be removed
+            // remotely; dropping just the record keeps the row manageable.
+            if (!await this.confirmDelete(this.i18n.recordsDeleteLocalOnly, record)) {
+                return false;
+            }
+        } else {
+            if (!await this.confirmDelete(this.i18n.recordsDeleteQuestion, record)) {
+                return false;
+            }
+
+            try {
+                await target.deleteDeployment(record.deploymentId);
+            } catch (error) {
+                showMessage(`${this.i18n.recordsDeleteFailed}: ${errorMessage(error)}`, 0, "error");
+                return false;
+            }
+        }
+
+        await this.records.remove(record.provider, record.docId);
+        showMessage(this.i18n.recordsDeleteOk, 3000);
+        return true;
+    }
+
+    /** confirmDialog with a DOM body, so record fields never pass through innerHTML. */
+    private confirmDelete(question: string, record: PublishRecord): Promise<boolean> {
+        return new Promise((resolve) => {
+            const content = document.createElement("div");
+            const ask = document.createElement("div");
+            ask.textContent = question;
+            const subject = document.createElement("div");
+            subject.className = "sp-confirm__subject ft__smaller ft__on-surface";
+            subject.textContent = `${record.docName} · ${record.url}`;
+            content.append(ask, subject);
+
+            confirmDialog({
+                title: this.i18n.recordsDeleteTitle,
+                content,
+                confirm: () => resolve(true),
+                cancel: () => resolve(false),
+            });
+        });
+    }
+
     uninstall() {
-        this.removeData(STORAGE_NAME);
+        this.removeData(`${STORAGE_NAME}.json`);
+        this.removeData(`${RECORDS_NAME}.json`);
     }
 }
 
@@ -335,6 +464,10 @@ export default class PublishPlugin extends Plugin {
 function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
 }
+
+const copyToClipboard = (text: string): void => {
+    navigator.clipboard?.writeText(text).catch(() => { });
+};
 
 function activeDocumentId(): string | null {
     const selectors = [

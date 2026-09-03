@@ -28,6 +28,8 @@ export interface PublishTarget {
     findProject(): Promise<string | null>;
     createProject(): Promise<string>;
     deploy(files: SiteFile[], onProgress: Progress): Promise<DeployResult>;
+    /** Removes an earlier deployment; one that is already gone counts as removed. */
+    deleteDeployment(deploymentId: string): Promise<void>;
 }
 
 export function createTarget(config: ProviderConfig): PublishTarget {
@@ -41,6 +43,7 @@ export function createTarget(config: ProviderConfig): PublishTarget {
             },
             createProject: async () => (await vercel.createProject(config)).name,
             deploy: (files, onProgress) => vercel.deploy(files, config, onProgress),
+            deleteDeployment: (deploymentId) => vercel.deleteDeployment(config, deploymentId),
         };
     }
 
@@ -53,5 +56,6 @@ export function createTarget(config: ProviderConfig): PublishTarget {
         },
         createProject: async () => (await cloudflare.createProject(config)).name,
         deploy: (files, onProgress) => cloudflare.deploy(files, config, onProgress),
+        deleteDeployment: (deploymentId) => cloudflare.deleteDeployment(config, deploymentId),
     };
 }

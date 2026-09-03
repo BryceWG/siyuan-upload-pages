@@ -63,6 +63,15 @@ export function createProject(config: VercelConfig): Promise<ProjectInfo> {
     });
 }
 
+/** Removes an earlier deployment; a deployment that is already gone counts as removed. */
+export async function deleteDeployment(config: VercelConfig, deploymentId: string): Promise<void> {
+    await vercelJson<unknown>(config, {
+        path: `/v13/deployments/${encodeURIComponent(deploymentId)}`,
+        method: "DELETE",
+        allowMissing: true,
+    });
+}
+
 
 export async function deploy(
     files: SiteFile[],

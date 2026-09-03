@@ -215,6 +215,24 @@ export async function deploy(
     return { id: deployment.id, url: deployment.url };
 }
 
+/**
+ * Removes a deployment created earlier by `deploy`. Deleting a production
+ * deployment falls back to the previous production deployment; deleting a
+ * deployment that no longer exists is treated as success.
+ */
+export async function deleteDeployment(
+    config: CloudflarePagesConfig,
+    deploymentId: string,
+): Promise<void> {
+    const resolved = await resolve(config);
+    await cloudflare<unknown>({
+        url: `${projectUrl(resolved)}/deployments/${encodeURIComponent(deploymentId)}`,
+        method: "DELETE",
+        token: resolved.apiToken,
+        allowMissing: true,
+    });
+}
+
 async function mintUploadToken(config: Resolved): Promise<string> {
     const result = await cloudflare<{ jwt: string }>({
         url: `${projectUrl(config)}/upload-token`,

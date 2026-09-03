@@ -1,0 +1,56 @@
+// Styles for the "published pages" dialog and its confirm sub-dialog.
+// The rest of the plugin needs no custom CSS.
+
+.sp-records-content {
+    overflow: auto;
+}
+
+.sp-records__empty {
+    padding: 2.5rem 1rem;
+    text-align: center;
+    color: var(--b3-theme-on-surface);
+}
+
+.sp-records__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+
+    th,
+    td {
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--b3-border-color);
+        text-align: left;
+        white-space: nowrap;
+    }
+
+    th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background-color: var(--b3-theme-background);
+        color: var(--b3-theme-on-surface);
+        font-weight: 600;
+    }
+}
+
+.sp-records__name {
+    white-space: normal;
+    min-width: 10rem;
+}
+
+.sp-records__actions {
+    .b3-button {
+        padding: 2px 10px;
+        margin-right: 4px;
+
+        &:last-child {
+            margin-right: 0;
+        }
+    }
+}
+
+.sp-confirm__subject {
+    margin-top: 8px;
+    word-break: break-all;
+}

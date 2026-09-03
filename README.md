@@ -44,6 +44,25 @@ Upload uses the non-Git deployment flow: each file is sent to `POST /v2/files` (
 
 The deployment URL is copied to the clipboard when the publish succeeds.
 
+### Publish records and republishing
+
+Every publish leaves a record in the plugin data (channel, document name and id, URL, publish time and update time). Publishing the same document again:
+
+- **Unchanged page** (the built files match the fingerprint of the last publish): nothing is re-uploaded — the plugin reports the existing record and copies the current link;
+- **Changed page**: it redeploys and refreshes the record (the original publish time is kept, the update time advances).
+
+Records are tracked per channel + document: publishing the same document to both Cloudflare Pages and Vercel keeps two independent records.
+
+### Managing published pages
+
+Top bar icon → "Manage published pages", or plugin settings → "Published pages" → "Manage published pages". For every record you can:
+
+- **Copy link**: puts the deployment URL on the clipboard (hover the button to see the full URL);
+- **Copy ID**: copies the document id (hover the button to see it);
+- **Delete** the publish: after a confirmation it removes the remote deployment and the local record. When the channel credentials are missing the remote deployment cannot be deleted, and you may drop just the local record. Deleting a record is also the way to force a fresh deploy of an unchanged page.
+
+Records are stored in `data/storage/petal/siyuan-upload-pages/publish-records.json`.
+
 ## Development
 
 ```bash
