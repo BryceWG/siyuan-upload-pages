@@ -13,9 +13,9 @@ import { createSiYuanLiveReloadScript, readPluginManifest } from "./scripts/siyu
 const env = process.env;
 const isSrcmap = env.VITE_SOURCEMAP === "inline";
 const isDev = env.NODE_ENV === "development";
-const buildTarget = env.VITE_BUILD_TARGET === "kernel" ? "kernel" : "app";
 
 const outputDir = isDev ? "dev" : "dist";
+
 const pluginManifest = readPluginManifest();
 const packageImageTargets = [
     ["icon", "icon.png"],
@@ -33,44 +33,9 @@ const pluginReloadGapMs = Number.parseInt(env.SIYUAN_PLUGIN_RELOAD_GAP_MS || "50
 console.log("isDev=>", isDev);
 console.log("isSrcmap=>", isSrcmap);
 console.log("outputDir=>", outputDir);
-console.log("buildTarget=>", buildTarget);
 
-export default defineConfig(buildTarget === "kernel" ? {
-    build: {
-        outDir: outputDir,
-        emptyOutDir: false,
-        minify: true,
-        sourcemap: isSrcmap ? "inline" : false,
+export default defineConfig({
 
-        lib: {
-            entry: resolve(import.meta.dirname, "src/kernel.ts"),
-            name: "KernelPluginSample",
-            fileName: () => "kernel.js",
-            formats: ["iife"],
-        },
-        rollupOptions: {
-            plugins: isDev ? [
-                watchExternalFiles(["src/kernel.ts"])
-            ] : [
-                cleanupDistFiles({
-                    patterns: ["i18n/*.yaml", "i18n/*.md"],
-                    distDir: outputDir
-                }),
-                zipPack({
-                    inDir: "./dist",
-                    outDir: "./",
-                    outFileName: "package.zip"
-                })
-            ],
-
-            external: [],
-
-            output: {
-                entryFileNames: "kernel.js",
-            },
-        },
-    }
-} : {
     resolve: {
         alias: {
             "@": resolve(import.meta.dirname, "src"),
@@ -123,7 +88,18 @@ export default defineConfig(buildTarget === "kernel" ? {
                     "./docs/*.md",
                     "./plugin.json"
                 ])
-            ] : [],
+            ] : [
+                cleanupDistFiles({
+                    patterns: ["i18n/*.yaml", "i18n/*.md"],
+                    distDir: outputDir
+                }),
+                zipPack({
+                    inDir: "./dist",
+                    outDir: "./",
+                    outFileName: "package.zip"
+                })
+            ],
+
 
             external: ["siyuan", "process"],
 

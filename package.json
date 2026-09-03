@@ -1,8 +1,9 @@
 {
-  "name": "plugin-sample-vite-svelte",
-  "version": "0.5.1",
+  "name": "siyuan-upload-pages",
+  "version": "0.1.0",
   "type": "module",
-  "description": "This is a sample plugin based on vite and svelte for Siyuan (https://b3log.org/siyuan)",
+  "description": "Publish a SiYuan document to Cloudflare Pages as a static page",
+
   "repository": "",
   "homepage": "",
   "author": "frostime",
@@ -12,20 +13,21 @@
     "node": ">=24.0.0"
   },
   "scripts": {
-    "dev": "run-p dev:app dev:kernel",
-    "dev:app": "cross-env NODE_ENV=development VITE_SOURCEMAP=inline VITE_BUILD_TARGET=app vite build --watch",
-    "dev:kernel": "cross-env NODE_ENV=development VITE_SOURCEMAP=inline VITE_BUILD_TARGET=kernel vite build --watch",
+    "dev": "cross-env NODE_ENV=development VITE_SOURCEMAP=inline vite build --watch",
     "check": "run-s check:types check:svelte",
     "check:types": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "check:svelte": "svelte-check --tsconfig ./tsconfig.json",
     "clean": "node ./scripts/clean.js",
-    "build": "run-s clean build:app build:kernel",
-    "build:app": "cross-env NODE_ENV=production VITE_BUILD_TARGET=app vite build",
-    "build:kernel": "cross-env NODE_ENV=production VITE_BUILD_TARGET=kernel vite build",
+    "build": "run-s clean build:app",
+    "build:app": "cross-env NODE_ENV=production vite build",
+
     "make-link": "node --no-warnings ./scripts/make_dev_link.js",
     "make-link-win": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/elevate.ps1 -scriptPath ./scripts/make_dev_link.js",
     "update-version": "node --no-warnings ./scripts/update_version.js",
     "make-install": "pnpm run build && node --no-warnings ./scripts/make_install.js"
+  },
+  "dependencies": {
+    "@noble/hashes": "1.8.0"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.0",

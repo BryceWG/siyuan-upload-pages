@@ -1,9 +1,10 @@
 {
-  "name": "plugin-sample-vite-svelte",
-  "author": "frostime",
-  "url": "https://github.com/siyuan-note/plugin-sample-vite-svelte",
-  "version": "0.5.1",
+  "name": "siyuan-upload-pages",
+  "author": "Bryce",
+  "url": "",
+  "version": "0.1.0",
   "minAppVersion": "3.8.0",
+
   "kernels": [
     "windows",
     "linux",
@@ -32,13 +33,14 @@
     "desktop-window"
   ],
   "displayName": {
-    "default": "Plugin sample with vite and svelte",
-    "zh-CN": "插件样例 vite + svelte 版"
+    "default": "Publish to Cloudflare Pages",
+    "zh-CN": "发布到 Cloudflare Pages"
   },
   "description": {
-    "default": "SiYuan plugin sample with vite and svelte",
-    "zh-CN": "使用 vite 和 svelte 开发的思源插件样例"
+    "default": "Publish the current SiYuan document to an existing Cloudflare Pages project as a static page",
+    "zh-CN": "把当前思源文档发布为静态页面，上传到已有的 Cloudflare Pages 项目"
   },
+
   "readme": {
     "default": "README.md",
     "zh-CN": "README.zh-CN.md"
@@ -54,7 +56,10 @@
     ]
   },
   "keywords": [
-    "sample",
-    "示例"
+    "publish",
+    "cloudflare",
+    "pages",
+    "发布"
   ]
+
 }
