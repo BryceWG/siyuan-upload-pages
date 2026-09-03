@@ -33,13 +33,14 @@
     "desktop-window"
   ],
   "displayName": {
-    "default": "Publish to Cloudflare Pages",
-    "zh-CN": "发布到 Cloudflare Pages"
+    "default": "Publish to Cloudflare Pages / Vercel",
+    "zh-CN": "发布到 Cloudflare Pages / Vercel"
   },
   "description": {
-    "default": "Publish the current SiYuan document to an existing Cloudflare Pages project as a static page",
-    "zh-CN": "把当前思源文档发布为静态页面，上传到已有的 Cloudflare Pages 项目"
+    "default": "Publish the current SiYuan document as a static page to an existing Cloudflare Pages or Vercel project",
+    "zh-CN": "把当前思源文档发布为静态页面，上传到已有的 Cloudflare Pages 或 Vercel 项目"
   },
+
 
   "readme": {
     "default": "README.md",

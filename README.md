@@ -1,6 +1,6 @@
-# Publish to Cloudflare Pages
+# Publish to Cloudflare Pages / Vercel
 
-Publishes the currently open SiYuan document as a static page to an existing Cloudflare Pages project.
+Publishes the currently open SiYuan document as a static page to an existing Cloudflare Pages or Vercel project.
 
 ## How it works
 
@@ -8,26 +8,55 @@ Publishes the currently open SiYuan document as a static page to an existing Clo
 2. The stylesheets of the active theme are read from the kernel (same origin): `stage/build/export/base.css`, `appearance/themes/<theme>/theme.css`, the KaTeX stylesheet and the code highlight theme, together with the fonts they reference. The published page therefore keeps your current theme.
 3. Math and code highlighting are rendered **at publish time** with SiYuan's bundled KaTeX / highlight.js, so the uploaded page contains no JavaScript.
 4. Referenced `assets/` and `emojis/` files are uploaded under their original paths.
-5. Upload happens through Cloudflare Pages Direct Upload. The resulting site is a single `index.html` plus static files.
+5. The selected platform uploads the result. The site is a single `index.html` plus static files.
 
-Every Cloudflare request is forwarded by the kernel through `/api/network/forwardProxy`: `api.cloudflare.com` does not answer `OPTIONS`, so a frontend request carrying an `Authorization` header always fails its CORS preflight.
+Every outbound request is forwarded by the kernel through `/api/network/forwardProxy`: `api.cloudflare.com` does not answer `OPTIONS`, so a frontend request carrying an `Authorization` header always fails its CORS preflight.
 
-## Setup
+Content generation and upload are separate: `src/publish/site-builder.ts` only produces `SiteFile[]`, and `src/publish/provider.ts` dispatches to a platform. Adding a platform does not touch the content pipeline.
 
-1. Create a Pages project in the Cloudflare dashboard and choose **Direct Upload**. Git-integrated projects cannot be used here, and the project type cannot be changed after creation.
+## Setup: Cloudflare Pages
+
+1. Create a Pages project of type **Direct Upload**. Git-integrated projects cannot be used here, and the type cannot be changed after creation. The API is the quickest route:
+
+   ```bash
+   curl -X POST "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT/pages/projects" \
+     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+     --data '{"name":"siyuan-notes","production_branch":"main"}'
+   ```
+
 2. Create an API Token with `Account` → `Cloudflare Pages` → `Edit`.
-3. Fill in the Account ID, project name and API Token in the plugin settings, then press "Test".
+3. In the plugin settings set "Publish target" to Cloudflare Pages and fill in the Account ID, project name, token and branch.
+
+Upload uses Direct Upload: `upload-token` → `check-missing` → `upload` → `upsert-hashes` → `deployments`. The asset key is `blake3(base64(content) + extension)` truncated to 32 hex characters.
+
+## Setup: Vercel
+
+1. Create a Vercel project and do **not** connect it to Git (a Git-connected project works, but the two sources will overwrite each other).
+2. Create an Access Token under account settings → Tokens, scoped to the account or team that owns the project.
+3. In the plugin settings set "Publish target" to Vercel and fill in the token and project name; team projects also need the Team ID.
+
+Upload uses the non-Git deployment flow: each file is sent to `POST /v2/files` (`x-vercel-digest` is the sha1 of the file content), then `POST /v13/deployments` references them by sha. `projectSettings.framework` is `null`, so Vercel runs no build and serves the files as-is.
 
 ## Usage
 
-- Top bar icon → "Publish current document to Cloudflare Pages"
+- Top bar icon → "Publish current document"
 - Or the command with the same name in the command palette
 
 The deployment URL is copied to the clipboard when the publish succeeds.
+
+## Development
+
+```bash
+pnpm install
+pnpm run dev          # emits to dev/, use together with make-link
+pnpm run build        # emits to dist/ and packs package.zip
+pnpm run check        # tsc + svelte-check
+```
 
 ## Limitations
 
 - Only the current document is published; the site is a single `index.html`.
 - Block references cannot resolve on a single-page site and degrade to plain text.
 - Diagrams that need runtime rendering (Mermaid, ECharts, flowcharts) are not processed and fall back to their source text.
-- The API Token is stored with the plugin data in this workspace (`data/storage/petal/siyuan-upload-pages/publish-config.json`). Do not share that file.
+- Vercel uploads one file per request, so it makes more requests than Cloudflare, which uploads in batches.
+- Tokens are stored with the plugin data in this workspace (`data/storage/petal/siyuan-upload-pages/publish-config.json`). Do not share that file.

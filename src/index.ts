@@ -3,17 +3,17 @@ import "./index.scss";
 
 import { SettingUtils } from "./libs/setting-utils";
 import { buildSinglePageSite } from "./publish/site-builder";
-import {
-    CloudflarePagesConfig,
-    deploy,
-    getProject,
-    validateConfig,
-} from "./publish/cloudflare-pages";
+import { ProviderConfig, ProviderId, PublishTarget, createTarget } from "./publish/provider";
+
 import { formatSize, totalSize } from "./publish/site";
 
 const STORAGE_NAME = "publish-config";
 
+const CLOUDFLARE_KEYS = ["accountId", "projectName", "apiToken", "branch"];
+const VERCEL_KEYS = ["vercelToken", "vercelProject", "vercelTeamId", "vercelTarget"];
+
 export default class PublishPlugin extends Plugin {
+
 
     private settingUtils: SettingUtils;
     private publishing = false;
@@ -76,6 +76,22 @@ export default class PublishPlugin extends Plugin {
         this.settingUtils = new SettingUtils({ plugin: this, name: STORAGE_NAME });
 
         this.settingUtils.addItem({
+            key: "provider",
+            value: "cloudflare",
+            type: "select",
+            title: this.i18n.settingProvider,
+            description: "",
+            options: {
+                cloudflare: "Cloudflare Pages",
+                vercel: "Vercel",
+            },
+            action: {
+                callback: () => this.applyProviderVisibility(),
+            },
+        });
+
+
+        this.settingUtils.addItem({
             key: "accountId",
             value: "",
             type: "textinput",
@@ -103,13 +119,48 @@ export default class PublishPlugin extends Plugin {
             title: this.i18n.settingBranch,
             description: this.i18n.settingBranchDesc,
         });
+
+        this.settingUtils.addItem({
+            key: "vercelToken",
+            value: "",
+            type: "textinput",
+            title: this.i18n.settingVercelToken,
+            description: this.i18n.settingVercelTokenDesc,
+        });
+        this.settingUtils.addItem({
+            key: "vercelProject",
+            value: "",
+            type: "textinput",
+            title: this.i18n.settingVercelProject,
+            description: this.i18n.settingVercelProjectDesc,
+        });
+        this.settingUtils.addItem({
+            key: "vercelTeamId",
+            value: "",
+            type: "textinput",
+            title: this.i18n.settingVercelTeamId,
+            description: this.i18n.settingVercelTeamIdDesc,
+        });
+        this.settingUtils.addItem({
+            key: "vercelTarget",
+            value: "production",
+            type: "select",
+            title: this.i18n.settingVercelTarget,
+            description: "",
+            options: {
+                production: "production",
+                preview: "preview",
+            },
+        });
+
         this.settingUtils.addItem({
             key: "addTitle",
             value: true,
             type: "checkbox",
             title: this.i18n.settingAddTitle,
-            description: this.i18n.settingAddTitleDesc,
+            description: "",
         });
+
         this.settingUtils.addItem({
             key: "contentWidth",
             value: "800px",
@@ -121,11 +172,11 @@ export default class PublishPlugin extends Plugin {
             key: "testConnection",
             value: "",
             type: "button",
-            title: this.i18n.settingTestConnection,
-            description: this.i18n.settingTestConnectionDesc,
+            title: this.i18n.settingEnsureProject,
+            description: this.i18n.settingEnsureProjectDesc,
             button: {
-                label: this.i18n.settingTestConnectionLabel,
-                callback: () => this.testConnection(),
+                label: this.i18n.settingEnsureProjectLabel,
+                callback: () => this.checkOrCreateProject(),
             },
         });
 
@@ -137,42 +188,89 @@ export default class PublishPlugin extends Plugin {
      * live input is only preferred while the settings dialog is actually open —
      * that is what makes "test connection" work on unsaved edits.
      */
-    private readConfig(): CloudflarePagesConfig {
-        const read = (key: string): string => {
-            const element = this.settingUtils.getElement(key);
-            const value = element?.isConnected
-                ? this.settingUtils.take(key)
-                : this.settingUtils.get(key);
-            return String(value ?? "").trim();
+    private read(key: string): string {
+        const element = this.settingUtils.getElement(key);
+        const value = element?.isConnected
+            ? this.settingUtils.take(key)
+            : this.settingUtils.get(key);
+        return String(value ?? "").trim();
+    }
+
+    private selectedProvider(): ProviderId {
+        return (this.read("provider") || "cloudflare") as ProviderId;
+    }
+
+    /** Only the settings of the selected platform are shown. */
+    private applyProviderVisibility() {
+        const provider = this.selectedProvider();
+        const setVisible = (keys: string[], visible: boolean) => {
+            for (const key of keys) {
+                this.settingUtils
+                    .getElement(key)
+                    ?.closest(".config-item")
+                    ?.classList.toggle("fn__none", !visible);
+            }
         };
 
+        setVisible(CLOUDFLARE_KEYS, provider === "cloudflare");
+        setVisible(VERCEL_KEYS, provider === "vercel");
+    }
+
+    openSetting(): void {
+        super.openSetting();
+        this.applyProviderVisibility();
+    }
+
+    private providerConfig(): ProviderConfig {
+        const provider = this.selectedProvider();
+
+        if (provider === "vercel") {
+
+            return {
+                provider: "vercel",
+                token: this.read("vercelToken"),
+                project: this.read("vercelProject"),
+                teamId: this.read("vercelTeamId"),
+                target: this.read("vercelTarget") === "preview" ? "preview" : "production",
+            };
+        }
+
         return {
-            apiToken: read("apiToken"),
-            accountId: read("accountId"),
-            projectName: read("projectName"),
-            branch: read("branch"),
+            provider: "cloudflare",
+            apiToken: this.read("apiToken"),
+            accountId: this.read("accountId"),
+            projectName: this.read("projectName"),
+            branch: this.read("branch"),
         };
     }
 
+    /** Resolves the remote project, creating it when it does not exist yet. */
+    private async ensureProject(target: PublishTarget): Promise<void> {
+        const existing = await target.findProject();
+        if (existing) {
+            showMessage(`${this.i18n.projectReady}: ${existing}`, 5000);
+            return;
+        }
 
-    private async testConnection() {
-        const config = this.readConfig();
-        const invalid = validateConfig(config);
+        const created = await target.createProject();
+        showMessage(`${this.i18n.projectCreated}: ${created}`, 5000);
+    }
+
+    private async checkOrCreateProject() {
+        const target = createTarget(this.providerConfig());
+        const invalid = target.validate();
         if (invalid) {
             showMessage(invalid, 6000, "error");
             return;
         }
 
         try {
-            const project = await getProject(config);
-            showMessage(
-                `${this.i18n.connectionOk}: ${project.name} (${project.subdomain})`,
-                7000,
-            );
+            await this.ensureProject(target);
         } catch (error) {
             showMessage(`${this.i18n.connectionFailed}: ${errorMessage(error)}`, 0, "error");
         }
     }
+
 
     // -------------------------------------------------------------- publish
 
@@ -188,8 +286,8 @@ export default class PublishPlugin extends Plugin {
             return;
         }
 
-        const config = this.readConfig();
-        const invalid = validateConfig(config);
+        const target = createTarget(this.providerConfig());
+        const invalid = target.validate();
         if (invalid) {
             showMessage(invalid, 6000, "error");
             this.openSetting();
@@ -198,7 +296,10 @@ export default class PublishPlugin extends Plugin {
 
         this.publishing = true;
         try {
+            await this.ensureProject(target);
+
             showMessage(this.i18n.buildingSite, 4000);
+
             const site = await buildSinglePageSite(docId, {
                 addTitle: this.settingUtils.get("addTitle") !== false,
                 contentWidth: String(this.settingUtils.get("contentWidth") || "800px"),
@@ -214,11 +315,10 @@ export default class PublishPlugin extends Plugin {
                 4000,
             );
 
-            const result = await deploy(site.files, config, (message) => showMessage(message, 3000));
-            const url = result.url || `https://${config.branch}.${config.projectName}.pages.dev`;
+            const result = await target.deploy(site.files, (message) => showMessage(message, 3000));
 
-            navigator.clipboard?.writeText(url).catch(() => { });
-            showMessage(`${this.i18n.publishOk}: ${url}`, 0);
+            navigator.clipboard?.writeText(result.url).catch(() => { });
+            showMessage(`${this.i18n.publishOk}: ${result.url}`, 0);
         } catch (error) {
             showMessage(`${this.i18n.publishFailed}: ${errorMessage(error)}`, 0, "error");
         } finally {

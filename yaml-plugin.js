@@ -38,7 +38,15 @@ export default function vitePluginYamlI18n(options = {}) {
             //Parse yaml file, output to json
             const files = fs.readdirSync(inDir);
             for (const file of files) {
+                // Plain JSON sources are copied as-is. Vite's publicDir copy only
+                // runs on the initial build, so without this the output i18n goes
+                // stale on every incremental rebuild in watch mode.
+                if (file.endsWith('.json')) {
+                    fs.copyFileSync(resolve(inDir, file), resolve(outDir, file));
+                    continue;
+                }
                 if (file.endsWith('.yaml') || file.endsWith('.yml')) {
+
                     console.log(`-- Parsing ${file}`)
                     //检查是否有同名的json文件
                     const jsonFile = file.replace(/\.(yaml|yml)$/, '.json');
