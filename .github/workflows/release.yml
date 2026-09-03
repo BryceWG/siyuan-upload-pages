@@ -1,0 +1,74 @@
+name: Create Release on Tag Push
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.4.0
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: "https://registry.npmjs.org"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate release version
+        shell: bash
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          package_version="$(node -p "require('./package.json').version")"
+          plugin_version="$(node -p "require('./plugin.json').version")"
+
+          if [[ "$GITHUB_REF_NAME" != v* || -z "$tag_version" ]]; then
+            echo "Invalid release tag: $GITHUB_REF_NAME (expected v<version>)"
+            exit 1
+          fi
+
+          if [[ "$tag_version" != "$package_version" ]]; then
+            echo "Tag version ($tag_version) does not match package.json ($package_version)"
+            exit 1
+          fi
+
+          if [[ "$tag_version" != "$plugin_version" ]]; then
+            echo "Tag version ($tag_version) does not match plugin.json ($plugin_version)"
+            exit 1
+          fi
+
+          echo "Release version validated: $tag_version"
+
+      - name: Check source
+        run: pnpm check
+
+      - name: Build production package
+        run: |
+          pnpm build
+          cd dist
+          zip -r ../package.zip ./*
+
+      - name: Release
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          artifactErrorsFailBuild: true
+          artifacts: "package.zip"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          prerelease: false

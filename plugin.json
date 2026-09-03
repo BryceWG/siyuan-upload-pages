@@ -1,0 +1,60 @@
+{
+  "name": "plugin-sample-vite-svelte",
+  "author": "frostime",
+  "url": "https://github.com/siyuan-note/plugin-sample-vite-svelte",
+  "version": "0.5.1",
+  "minAppVersion": "3.8.0",
+  "kernels": [
+    "windows",
+    "linux",
+    "darwin",
+    "ios",
+    "android",
+    "harmony",
+    "docker",
+    "all"
+  ],
+  "disabledInPublish": true,
+  "backends": [
+    "windows",
+    "linux",
+    "darwin",
+    "ios",
+    "android",
+    "harmony",
+    "docker"
+  ],
+  "frontends": [
+    "desktop",
+    "mobile",
+    "browser-desktop",
+    "browser-mobile",
+    "desktop-window"
+  ],
+  "displayName": {
+    "default": "Plugin sample with vite and svelte",
+    "zh-CN": "插件样例 vite + svelte 版"
+  },
+  "description": {
+    "default": "SiYuan plugin sample with vite and svelte",
+    "zh-CN": "使用 vite 和 svelte 开发的思源插件样例"
+  },
+  "readme": {
+    "default": "README.md",
+    "zh-CN": "README.zh-CN.md"
+  },
+  "icon": "icon.png",
+  "preview": "preview.png",
+  "funding": {
+    "openCollective": "",
+    "patreon": "",
+    "github": "",
+    "custom": [
+      "https://ld246.com/sponsor"
+    ]
+  },
+  "keywords": [
+    "sample",
+    "示例"
+  ]
+}
