@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 64 64" role="img" aria-label="PaperKite">
+  <rect x="1" y="1" width="62" height="62" rx="15" fill="#FBFAF6" stroke="#E3DFD5" stroke-width="2"/>
+  <path d="M32 9 50 25 32 25Z" fill="#E86A3C" opacity="0.9"/>
+  <g fill="none" stroke="#23262B" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 9 14 25 32 47 50 25Z"/>
+    <path d="M14 25H50M32 9v38"/>
+    <path d="M32 47c-2 4-7 3.6-9.5 8"/>
+  </g>
+  <path d="M22.5 55 18.4 55.6 19.6 51.7Z" fill="#E86A3C"/>
+</svg>

@@ -29,7 +29,12 @@ export default class PublishPlugin extends Plugin {
         this.isMobile = frontEnd === "mobile" || frontEnd === "browser-mobile";
 
         this.addIcons(`<symbol id="iconPublishPages" viewBox="0 0 32 32">
-<path d="M16 3 26 12h-6v9h-8v-9H6L16 3zM5 24h22v5H5v-5z"></path>
+<g style="fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round">
+<path d="M16 3 6 12l10 12 10-12Z"></path>
+<path d="M6 12h20M16 3v21"></path>
+<path d="M16 24c-1 2.4-3.8 2-5.2 4.8"></path>
+</g>
+<path style="fill:currentColor" d="M10.8 28.8 8 29.2l.8-2.6Z"></path>
 </symbol>`);
 
         this.addCommand({

@@ -33,12 +33,12 @@
     "desktop-window"
   ],
   "displayName": {
-    "default": "Publish to Cloudflare Pages / Vercel",
-    "zh-CN": "发布到 Cloudflare Pages / Vercel"
+    "default": "PaperKite",
+    "zh-CN": "纸鸢"
   },
   "description": {
-    "default": "Publish the current SiYuan document as a static page to an existing Cloudflare Pages or Vercel project",
-    "zh-CN": "把当前思源文档发布为静态页面，上传到已有的 Cloudflare Pages 或 Vercel 项目"
+    "default": "Let a document fly: turn the current SiYuan document into a self-contained static page, host it, and get a shareable link",
+    "zh-CN": "把文档放飞成一张独立的静态网页"
   },
 
 
@@ -58,9 +58,13 @@
   },
   "keywords": [
     "publish",
+    "share",
+    "static page",
     "cloudflare",
+    "vercel",
     "pages",
-    "发布"
+    "发布",
+    "分享"
   ]
 
 }

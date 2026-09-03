@@ -2,7 +2,7 @@
   "name": "siyuan-upload-pages",
   "version": "0.1.0",
   "type": "module",
-  "description": "Publish a SiYuan document to Cloudflare Pages as a static page",
+  "description": "PaperKite - publish a SiYuan document as a self-contained static page",
 
   "repository": "",
   "homepage": "",

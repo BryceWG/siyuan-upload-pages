@@ -1,6 +1,9 @@
-# Publish to Cloudflare Pages / Vercel
+# PaperKite
 
-Publishes the currently open SiYuan document as a static page to an existing Cloudflare Pages or Vercel project.
+Let a document fly. PaperKite turns the currently open SiYuan document into a self-contained static page and hosts it on a project you already own (Cloudflare Pages or Vercel), then hands you the link.
+
+[中文](./README.zh-CN.md)
+
 
 ## How it works
 
