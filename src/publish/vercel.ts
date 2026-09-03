@@ -1,22 +1,38 @@
 /**
  * Vercel non-Git deployment.
  *
- * Flow:
- *   1. POST /v2/files            per file, raw bytes, `x-vercel-digest: <sha1>`
- *   2. POST /v13/deployments     references the uploaded files by sha + size
+ * Small sites go up in one call, with every file inlined into the deployment
+ * request as base64. Above `INLINE_LIMIT_BYTES` the files are uploaded first
+ * (`POST /v2/files`, keyed by the sha1 of the content) and the deployment then
+ * references them by sha. Vercel has no archive upload, so those are the only
+ * two options.
  *
  * `projectSettings.framework = null` keeps Vercel from running a build step —
  * the uploaded files are served as-is.
  */
 
+
 import { sha1 } from "@noble/hashes/sha1";
 import { bytesToHex } from "@noble/hashes/utils";
 
+import PromiseLimitPool from "@/libs/promise-pool";
 import { proxyRequest } from "./proxy";
 import { SiteFile, bytesToBase64 } from "./site";
 import type { DeployResult, Progress } from "./provider";
 
 const API_BASE = "https://api.vercel.com";
+/** Vercel has no batch upload endpoint, so files go up concurrently instead. */
+const UPLOAD_CONCURRENCY = 6;
+/** Reporting every single file would spam the message area. */
+const PROGRESS_EVERY = 5;
+/**
+ * Small sites are inlined into the deployment request, which makes the whole
+ * upload a single call. The body limit of that endpoint is not documented, so
+ * this stays conservative and larger sites fall back to per-file upload.
+ */
+const INLINE_LIMIT_BYTES = 4 * 1024 * 1024;
+
+
 
 export interface VercelConfig {
     token: string;
@@ -78,24 +94,50 @@ export async function deploy(
     config: VercelConfig,
     onProgress: Progress = () => { },
 ): Promise<DeployResult> {
-    const entries = files.map((file) => ({
-        entry: {
-            // Vercel expects deployment-root-relative paths without a leading slash.
-            file: file.path.replace(/^\//, ""),
-            sha: bytesToHex(sha1(file.bytes)),
-            size: file.bytes.length,
-        } satisfies FileEntry,
-        bytes: file.bytes,
-    }));
+    // Vercel expects deployment-root-relative paths without a leading slash.
+    const paths = files.map((file) => file.path.replace(/^\//, ""));
+    const base64 = files.map((file) => bytesToBase64(file.bytes));
+    const inlineSize = base64.reduce((sum, value) => sum + value.length, 0);
 
-    let uploaded = 0;
-    for (const { entry, bytes } of entries) {
-        await uploadFile(config, entry.sha, bytes);
-        uploaded += 1;
-        onProgress(`上传中 ${uploaded}/${entries.length}`);
+    if (inlineSize <= INLINE_LIMIT_BYTES) {
+        onProgress(`上传中（单请求 ${files.length} 个文件）`);
+        return createDeployment(config, paths.map((path, index) => ({
+            file: path,
+            data: base64[index],
+            encoding: "base64",
+        })));
     }
 
+    const entries: FileEntry[] = files.map((file, index) => ({
+        file: paths[index],
+        sha: bytesToHex(sha1(file.bytes)),
+        size: file.bytes.length,
+    }));
+
+    // Identical content only has to be uploaded once, even if it is referenced
+    // under several paths.
+    const payloads = new Map<string, Uint8Array>();
+    files.forEach((file, index) => payloads.set(entries[index].sha, file.bytes));
+
+    const total = payloads.size;
+    let uploaded = 0;
+    const pool = new PromiseLimitPool<void>(UPLOAD_CONCURRENCY);
+    for (const [sha, bytes] of payloads) {
+        pool.add(async () => {
+            await uploadFile(config, sha, bytes);
+            uploaded += 1;
+            if (uploaded % PROGRESS_EVERY === 0 || uploaded === total) {
+                onProgress(`上传中 ${uploaded}/${total}`);
+            }
+        });
+    }
+    await pool.awaitAll();
+
     onProgress("创建部署…");
+    return createDeployment(config, entries);
+}
+
+async function createDeployment(config: VercelConfig, files: unknown[]): Promise<DeployResult> {
     const deployment = await vercelJson<{ id: string; url: string }>(config, {
         path: "/v13/deployments",
         method: "POST",
@@ -103,16 +145,39 @@ export async function deploy(
             name: config.project,
             project: config.project,
             target: config.target,
-            files: entries.map(({ entry }) => entry),
+            files,
             projectSettings: { framework: null },
         },
     });
 
-    return {
-        id: deployment.id,
-        url: deployment.url.startsWith("http") ? deployment.url : `https://${deployment.url}`,
-    };
+    let url = deployment.url.startsWith("http") ? deployment.url : `https://${deployment.url}`;
+    // Every deployment gets its own URL, but the project domain always serves
+    // the latest production deployment — prefer it so republishing keeps one
+    // stable link. The assigned domain cannot be derived from the project name
+    // (Vercel appends a suffix when the name is taken), so it is looked up.
+    if (config.target === "production") {
+        const domain = await findProjectDomain(config).catch(() => null);
+        if (domain) {
+            url = `https://${domain}`;
+        }
+    }
+
+    return { id: deployment.id, url };
 }
+
+/** The project's assigned `<name>.vercel.app` domain, skipping redirected ones. */
+async function findProjectDomain(config: VercelConfig): Promise<string | null> {
+    const result = await vercelJson<{ domains: { name: string; redirect?: string }[] }>(config, {
+        path: `/v9/projects/${encodeURIComponent(config.project)}/domains`,
+        method: "GET",
+    });
+    const domain = (result?.domains ?? []).find(
+        (item) => item.name?.endsWith(".vercel.app") && !item.redirect,
+    );
+    return domain?.name ?? null;
+}
+
+
 
 async function uploadFile(config: VercelConfig, sha: string, bytes: Uint8Array): Promise<void> {
     const response = await proxyRequest({

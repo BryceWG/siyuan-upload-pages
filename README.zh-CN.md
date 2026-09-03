@@ -2,7 +2,6 @@
 
 把当前打开的思源文档放飞成一张独立的静态网页，托管到你已经创建好的项目（Cloudflare Pages 或 Vercel）上，线还牵在你手里。
 
-把当前打开的思源文档发布成一个静态页面，上传到你已经创建好的 Cloudflare Pages 或 Vercel 项目。
 
 [English](./README.md)
 
@@ -83,6 +82,7 @@ pnpm run check        # tsc + svelte-check
 - 只发布当前一篇文档，整站只有一个 `index.html`。
 - 块引用无法在单页站点中跳转，会降级为纯文本。
 - Mermaid、ECharts、流程图等需要运行时渲染的图表暂不处理，会退化为源码文本。
-- Vercel 是逐文件上传的，文件多时请求次数会比 Cloudflare（批量上传）多。
+- Vercel 没有批量上传接口，是每个文件一个请求（并发 6），文件多时请求次数仍比 Cloudflare 的批量上传多。
+
 - Token 保存在本工作空间的插件数据文件（`data/storage/petal/siyuan-upload-pages/publish-config.json`）中，请勿分享该文件。
 

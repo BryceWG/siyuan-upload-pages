@@ -11,6 +11,9 @@
  * JavaScript at all.
  */
 
+import { blake3 } from "@noble/hashes/blake3";
+import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils";
+
 import { request } from "@/api";
 import { BuiltSite, SiteFile, guessContentType, textToBytes } from "./site";
 
@@ -64,6 +67,7 @@ export async function buildSinglePageSite(docId: string, options: BuildOptions):
 
     const stylesheets = await collectStylesheets(files, warnings);
     const title = response.data.name || "Untitled";
+    const canonical = canonicalHtml(holder);
     const html = renderPage(title, holder.innerHTML, stylesheets, options);
 
     files.set("/index.html", {
@@ -72,7 +76,71 @@ export async function buildSinglePageSite(docId: string, options: BuildOptions):
         contentType: "text/html; charset=utf-8",
     });
 
-    return { title, files: [...files.values()], warnings };
+    return {
+        title,
+        files: [...files.values()],
+        warnings,
+        fingerprint: contentFingerprint(canonical, title, options, files),
+    };
+}
+
+// -------------------------------------------------------------- fingerprint
+
+const BLOCK_ID = /^\d{14}-[a-z0-9]+$/;
+
+/**
+ * A canonical serialization of the built DOM for change detection. The kernel
+ * emits block attributes in Go map order — reshuffled on every export — and
+ * mints fresh ids for the footnote section each time, so the raw HTML of an
+ * unchanged document is never byte-identical (verified against a live kernel:
+ * with attributes sorted and block ids dropped, two exports of the same
+ * document match exactly). Sorting and dropping happens on a detached clone;
+ * the emitted page keeps the kernel's own attribute order and ids.
+ */
+function canonicalHtml(root: HTMLElement): string {
+    const clone = root.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll("*").forEach((element) => {
+        const attributes = [...element.attributes].map(({ name, value }) => ({
+            name,
+            value,
+            blockId: BLOCK_ID.test(value),
+        }));
+        attributes.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+        for (const attribute of attributes) {
+            element.removeAttribute(attribute.name);
+        }
+        for (const attribute of attributes) {
+            if (!attribute.blockId) {
+                element.setAttribute(attribute.name, attribute.value);
+            }
+        }
+    });
+    return clone.innerHTML;
+}
+
+/**
+ * Digest of everything the published page consists of: the canonical DOM in
+ * place of `/index.html` (whose bytes carry the kernel's attribute shuffling),
+ * the page shell inputs, and the exact bytes of every other site file.
+ */
+function contentFingerprint(
+    canonical: string,
+    title: string,
+    options: BuildOptions,
+    files: Map<string, SiteFile>,
+): string {
+    const assets = [...files.values()]
+        .filter((file) => file.path !== "/index.html")
+        .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+        .map((file) => `${file.path}:${bytesToHex(blake3(file.bytes))}`);
+    const parts = [
+        `title=${title}`,
+        `addTitle=${options.addTitle}`,
+        `width=${options.contentWidth}`,
+        `dom=${canonical}`,
+        `files=${assets.join("\n")}`,
+    ];
+    return bytesToHex(blake3(utf8ToBytes(parts.join("\n\n"))));
 }
 
 // ---------------------------------------------------------------- page shell
@@ -185,41 +253,76 @@ function stripSpriteIcons(root: HTMLElement): void {
 
 // --------------------------------------------------------------------- math
 
+/**
+ * Mirrors SiYuan's own `mathRender`: both block and inline math carry
+ * `data-subtype="math"`, block math is a `DIV`, and `data-content` is
+ * HTML-escaped by Lute so it needs unescaping before it reaches KaTeX.
+ */
 async function renderMath(root: HTMLElement, warnings: string[]): Promise<void> {
-    const blocks = root.querySelectorAll<HTMLElement>("[data-subtype='math'][data-content]");
-    const inline = root.querySelectorAll<HTMLElement>("[data-type~='inline-math'][data-content]");
-    if (blocks.length === 0 && inline.length === 0) {
+    const nodes = [...root.querySelectorAll<HTMLElement>("[data-subtype='math'][data-content]")];
+    if (nodes.length === 0) {
         return;
     }
 
     const katex = await loadGlobalScript<any>("katex", "/stage/protyle/js/katex/katex.min.js");
     if (!katex) {
-        warnings.push("未能加载 KaTeX，公式将以源码形式输出");
+        warnings.push(`未能加载 KaTeX，${nodes.length} 个公式将以源码形式输出`);
+        nodes.forEach((node) => {
+            node.textContent = unescapeHtml(node.getAttribute("data-content") ?? "");
+        });
         return;
     }
 
-    const render = (element: HTMLElement, target: HTMLElement, displayMode: boolean) => {
+    for (const node of nodes) {
+        const latex = unescapeHtml(node.getAttribute("data-content") ?? "");
+        const isBlock = node.tagName === "DIV";
         try {
-            target.innerHTML = katex.renderToString(element.getAttribute("data-content") ?? "", {
-                displayMode,
+            const html = katex.renderToString(latex, {
+                displayMode: isBlock,
                 output: "html",
                 throwOnError: false,
+                trust: true,
             });
+            if (isBlock) {
+                // SiYuan nests the output one level deeper than the spin frame.
+                const frame = mathFrame(node);
+                frame.innerHTML = "<span></span>";
+                frame.firstElementChild!.innerHTML = html;
+            } else {
+                node.innerHTML = html;
+            }
+            node.setAttribute("data-render", "true");
         } catch (error) {
-            warnings.push(`公式渲染失败：${String(error)}`);
+            warnings.push(`公式渲染失败: ${latex} (${String(error)})`);
+            node.textContent = latex;
         }
-    };
-
-    blocks.forEach((block) => {
-        const target = block.querySelector<HTMLElement>("[spin='1']") ?? block;
-        render(block, target, true);
-        block.removeAttribute("data-content");
-    });
-    inline.forEach((element) => {
-        render(element, element, false);
-        element.removeAttribute("data-content");
-    });
+        node.removeAttribute("data-content");
+    }
 }
+
+/** The container a block formula renders into, created when the export omits it. */
+function mathFrame(node: HTMLElement): Element {
+    const existing = node.querySelector("[spin]")
+        ?? [...node.children].find((child) => !child.classList.contains("protyle-attr"));
+    if (existing) {
+        return existing;
+    }
+    const frame = document.createElement("div");
+    node.insertBefore(frame, node.firstChild);
+    return frame;
+}
+
+/** `data-content` keeps Lute's HTML escaping even after the parser decoded the attribute. */
+function unescapeHtml(value: string): string {
+    const unescape = (window as any).Lute?.UnEscapeHTMLStr;
+    if (typeof unescape === "function") {
+        return unescape(value);
+    }
+    const area = document.createElement("textarea");
+    area.innerHTML = value;
+    return area.value;
+}
+
 
 // --------------------------------------------------------------------- code
 

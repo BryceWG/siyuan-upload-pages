@@ -80,5 +80,6 @@ pnpm run check        # tsc + svelte-check
 - Only the current document is published; the site is a single `index.html`.
 - Block references cannot resolve on a single-page site and degrade to plain text.
 - Diagrams that need runtime rendering (Mermaid, ECharts, flowcharts) are not processed and fall back to their source text.
-- Vercel uploads one file per request, so it makes more requests than Cloudflare, which uploads in batches.
+- Vercel has no batch upload endpoint, so it sends one request per file (6 in parallel). It still makes more requests than Cloudflare's batched upload.
+
 - Tokens are stored with the plugin data in this workspace (`data/storage/petal/siyuan-upload-pages/publish-config.json`). Do not share that file.
