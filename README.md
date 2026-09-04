@@ -45,7 +45,18 @@ Upload uses the non-Git deployment flow: each file is sent to `POST /v2/files` (
 - Top bar icon → "Publish current document"
 - Or the command with the same name in the command palette
 
-The deployment URL is copied to the clipboard when the publish succeeds.
+The click first opens the "Export options" dialog; the publish starts once the page layout is confirmed. The deployment URL is copied to the clipboard when the publish succeeds.
+
+### Export options
+
+Every option can be changed per publish, and the confirmed values become the defaults of the next one (stored in `data/storage/petal/siyuan-upload-pages/publish-template.json`):
+
+- **Show the document title on top of the page**
+- **Maximum content width**: a CSS length, for example `800px`
+- **Include the documents referenced by the body**: documents behind block references, document links and embed blocks are appended as sections of the page, and the references themselves become in-page anchors. Only one level is followed — references inside an included document stay plain text
+- **Show a table of contents on the right**: static anchor links only; it moves above the article on narrow screens (≤1100px)
+- **List the included referenced documents too**: needs both options above; the included documents and their own headings join the table of contents
+
 
 **Link stability**: a production deployment (Cloudflare production branch / Vercel `production` target) returns the project's fixed domain (Cloudflare: `<project>.pages.dev`; Vercel: the project's assigned `<name>.vercel.app` domain), so republishing updates the content under the same link. Preview deployments (non-production branch / `preview` target) get a new platform-generated URL every time.
 
@@ -79,8 +90,9 @@ pnpm run check        # tsc + svelte-check
 
 ## Limitations
 
-- Only the current document is published; the site is a single `index.html`.
-- Block references cannot resolve on a single-page site and degrade to plain text.
+- One document per publish; the site holds one `index.html` per document. With "include the documents referenced by the body" enabled, the referenced documents are merged into that same page.
+- Block references that are not included cannot resolve on the page and degrade to plain text.
+
 - Diagrams that need runtime rendering (Mermaid, ECharts, flowcharts) are not processed and fall back to their source text.
 - Vercel has no batch upload endpoint, so it sends one request per file (6 in parallel). It still makes more requests than Cloudflare's batched upload.
 

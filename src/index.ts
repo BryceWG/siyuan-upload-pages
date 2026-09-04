@@ -4,14 +4,17 @@ import "./index.scss";
 import { confirmDialog } from "./libs/dialog";
 import { SettingUtils } from "./libs/setting-utils";
 import { openRecordsDialog } from "./records-dialog";
+import { openPublishOptionsDialog } from "./publish-options-dialog";
 import { buildSinglePageSite } from "./publish/site-builder";
 import { ProviderConfig, ProviderId, PublishTarget, SiteManifest, createTarget } from "./publish/provider";
 import { PublishRecord, RecordStore } from "./publish/records";
+import { TemplateOptionStore } from "./publish/template-options";
 
 import { formatSize, randomSlug, totalSize } from "./publish/site";
 
 const STORAGE_NAME = "publish-config";
 const RECORDS_NAME = "publish-records";
+const TEMPLATE_NAME = "publish-template";
 
 const CLOUDFLARE_KEYS = ["accountId", "projectName", "apiToken", "branch"];
 const VERCEL_KEYS = ["vercelToken", "vercelProject", "vercelTeamId", "vercelTarget"];
@@ -19,8 +22,10 @@ const VERCEL_KEYS = ["vercelToken", "vercelProject", "vercelTeamId", "vercelTarg
 export default class PublishPlugin extends Plugin {
     private settingUtils: SettingUtils;
     private records = new RecordStore(this, RECORDS_NAME);
+    private templateOptions = new TemplateOptionStore(this, TEMPLATE_NAME);
     private publishing = false;
     private isMobile: boolean;
+
 
     onload() {
         const frontEnd = getFrontend();
@@ -53,6 +58,10 @@ export default class PublishPlugin extends Plugin {
         this.records.load().catch((error) => {
             console.error("[publish-pages] failed to load publish records", error);
         });
+        this.templateOptions.load().catch((error) => {
+            console.error("[publish-pages] failed to load template options", error);
+        });
+
 
         this.addTopBar({
             icon: "iconPublishPages",
@@ -170,22 +179,8 @@ export default class PublishPlugin extends Plugin {
         });
 
         this.settingUtils.addItem({
-            key: "addTitle",
-            value: true,
-            type: "checkbox",
-            title: this.i18n.settingAddTitle,
-            description: "",
-        });
-
-        this.settingUtils.addItem({
-            key: "contentWidth",
-            value: "800px",
-            type: "textinput",
-            title: this.i18n.settingContentWidth,
-            description: this.i18n.settingContentWidthDesc,
-        });
-        this.settingUtils.addItem({
             key: "testConnection",
+
             value: "",
             type: "button",
             title: this.i18n.settingEnsureProject,
@@ -328,13 +323,20 @@ export default class PublishPlugin extends Plugin {
 
         this.publishing = true;
         try {
+            const options = await this.askTemplateOptions();
+            if (!options) {
+                return;
+            }
+            await this.templateOptions.save(options);
+
             showMessage(this.i18n.buildingSite, 4000);
 
             const site = await buildSinglePageSite(docId, {
+                ...options,
                 slug: this.slugFor(provider, docId),
-                addTitle: this.settingUtils.get("addTitle") !== false,
-                contentWidth: String(this.settingUtils.get("contentWidth") || "800px"),
+                tocLabel: this.i18n.tocLabel,
             });
+
 
             if (site.warnings.length > 0) {
                 console.warn("[publish-pages] build warnings", site.warnings);
@@ -387,10 +389,31 @@ export default class PublishPlugin extends Plugin {
         }
     }
 
+    /** The template dialog every publish goes through; null means "cancelled". */
+    private askTemplateOptions() {
+        return openPublishOptionsDialog(
+            {
+                title: this.i18n.optionsTitle,
+                addTitle: this.i18n.optionAddTitle,
+                contentWidth: this.i18n.optionContentWidth,
+                contentWidthDesc: this.i18n.optionContentWidthDesc,
+                includeRefs: this.i18n.optionIncludeRefs,
+                includeRefsDesc: this.i18n.optionIncludeRefsDesc,
+                toc: this.i18n.optionToc,
+                tocDesc: this.i18n.optionTocDesc,
+                tocIncludeRefs: this.i18n.optionTocIncludeRefs,
+                tocIncludeRefsDesc: this.i18n.optionTocIncludeRefsDesc,
+                publish: this.i18n.optionsPublish,
+            },
+            this.templateOptions.get(),
+        );
+    }
+
     /**
      * A document keeps the slug it was first published under, so its link stays
      * valid even when the title changes later.
      */
+
     private slugFor(provider: ProviderId, docId: string): string {
         const existing = this.records.find(provider, docId);
         if (existing?.slug) {
@@ -506,7 +529,9 @@ export default class PublishPlugin extends Plugin {
     uninstall() {
         this.removeData(`${STORAGE_NAME}.json`);
         this.removeData(`${RECORDS_NAME}.json`);
+        this.removeData(`${TEMPLATE_NAME}.json`);
     }
+
 }
 
 /** The token must never reach a message box or the console. */

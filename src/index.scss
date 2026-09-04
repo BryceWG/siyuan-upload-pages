@@ -1,5 +1,17 @@
-// Styles for the "published pages" dialog and its confirm sub-dialog.
-// The rest of the plugin needs no custom CSS.
+// Styles for the "published pages" dialog, the export options dialog and the
+// confirm sub-dialog. The rest of the plugin needs no custom CSS.
+
+.sp-options {
+    overflow: auto;
+
+    .b3-label {
+        padding: 12px 16px;
+    }
+}
+
+.sp-options__row--off {
+    opacity: .5;
+}
 
 .sp-records-content {
     overflow: auto;

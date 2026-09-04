@@ -27,10 +27,8 @@
     "settingVercelTeamId": "Team ID",
     "settingVercelTeamIdDesc": "Only needed for team projects",
     "settingVercelTarget": "Deployment target",
-    "settingAddTitle": "Show the document title on top of the page",
-    "settingContentWidth": "Maximum content width",
-    "settingContentWidthDesc": "A CSS length, for example 800px",
     "settingEnsureProject": "Check project",
+
     "settingEnsureProjectDesc": "Creates the project under the name above when it does not exist, otherwise only reads its info",
     "settingEnsureProjectLabel": "Check / create",
     "settingManageRecords": "Published pages",
@@ -55,5 +53,18 @@
     "recordsCopyOk": "Link copied",
     "recordsCopyIdOk": "Doc ID copied",
     "recordUnchanged": "The page is unchanged; an existing publish record was found and its link copied",
-    "publishUpdatedOk": "The page changed; the publish was updated and its link copied"
+    "publishUpdatedOk": "The page changed; the publish was updated and its link copied",
+    "optionsTitle": "Export options",
+    "optionsPublish": "Publish",
+    "optionAddTitle": "Show the document title on top of the page",
+    "optionContentWidth": "Maximum content width",
+    "optionContentWidthDesc": "A CSS length, for example 800px",
+    "optionIncludeRefs": "Include the documents referenced by the body",
+    "optionIncludeRefsDesc": "Documents behind block references, document links and embed blocks are appended as sections; only one level is followed",
+    "optionToc": "Show a table of contents on the right",
+    "optionTocDesc": "Static anchor links only; moves above the article on narrow screens",
+    "optionTocIncludeRefs": "List the included referenced documents too",
+    "optionTocIncludeRefsDesc": "Needs both the table of contents and the included referenced documents",
+    "tocLabel": "Contents"
 }
+

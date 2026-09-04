@@ -27,10 +27,8 @@
     "settingVercelTeamId": "Team ID",
     "settingVercelTeamIdDesc": "仅团队项目需要填",
     "settingVercelTarget": "部署环境",
-    "settingAddTitle": "在页面顶部显示文档标题",
-    "settingContentWidth": "正文最大宽度",
-    "settingContentWidthDesc": "CSS 长度值，例如 800px",
     "settingEnsureProject": "检查项目",
+
     "settingEnsureProjectDesc": "项目不存在时按上面填写的项目名创建，已存在则只读取信息",
     "settingEnsureProjectLabel": "检查 / 创建",
     "settingManageRecords": "已发布页面",
@@ -55,5 +53,18 @@
     "recordsCopyOk": "链接已复制",
     "recordsCopyIdOk": "文档 ID 已复制",
     "recordUnchanged": "页面无变化，已有发布记录，链接已复制",
-    "publishUpdatedOk": "页面有变化，已更新发布，链接已复制"
+    "publishUpdatedOk": "页面有变化，已更新发布，链接已复制",
+    "optionsTitle": "导出设置",
+    "optionsPublish": "开始发布",
+    "optionAddTitle": "在页面顶部显示文档标题",
+    "optionContentWidth": "正文最大宽度",
+    "optionContentWidthDesc": "CSS 长度值，例如 800px",
+    "optionIncludeRefs": "包含正文中引用的其他文档",
+    "optionIncludeRefsDesc": "块引用、文档链接和嵌入块指向的文档会作为章节追加到页面末尾，只展开一层",
+    "optionToc": "在右侧显示目录导航",
+    "optionTocDesc": "纯静态锚点目录，窄屏时移到正文上方",
+    "optionTocIncludeRefs": "目录中包含被引用的文档",
+    "optionTocIncludeRefsDesc": "需要同时开启目录导航与包含被引用文档",
+    "tocLabel": "目录"
 }
+

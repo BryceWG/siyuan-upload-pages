@@ -14,8 +14,9 @@
 import { blake3 } from "@noble/hashes/blake3";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils";
 
-import { request } from "@/api";
+import { request, sql } from "@/api";
 import { BuiltSite, SiteFile, guessContentType, textToBytes } from "./site";
+import { TemplateOptions } from "./template-options";
 
 interface PreviewHTMLResponse {
     id: string;
@@ -25,54 +26,76 @@ interface PreviewHTMLResponse {
     type: string;
 }
 
-export interface BuildOptions {
+export interface BuildOptions extends TemplateOptions {
     /** Path segment the page is served under, e.g. `a1b2c3d4e5` in `/a1b2c3d4e5/`. */
     slug: string;
-    /** Prepend the document title as an `<h1>`. */
-    addTitle: boolean;
-    /** Max content width of the article, e.g. `800px`. */
-    contentWidth: string;
+    /** Heading of the table of contents, e.g. `目录`. */
+    tocLabel: string;
 }
 
 const PAGE_STYLE = `
+html { scroll-behavior: smooth; }
 html, body { margin: 0; padding: 0; }
 body { background-color: var(--b3-theme-background); color: var(--b3-theme-on-background); }
-.sp-page { max-width: __WIDTH__; margin: 0 auto; padding: 2rem 1.5rem 6rem; box-sizing: border-box; }
+.sp-shell { display: flex; align-items: flex-start; justify-content: center; gap: 2.5rem;
+    max-width: __SHELL_WIDTH__; margin: 0 auto; padding: 2rem 1.5rem 6rem; box-sizing: border-box; }
+.sp-page { order: 1; flex: 1 1 auto; min-width: 0; max-width: __WIDTH__; }
 .sp-title { font-size: 2em; line-height: 1.3; margin: 0 0 1.5rem; font-weight: 600; }
 .protyle-wysiwyg [data-node-id] { cursor: auto; }
 .protyle-wysiwyg .protyle-action { user-select: none; }
 img { max-width: 100%; }
+[id] { scroll-margin-top: 1.5rem; }
+.sp-toc { order: 2; flex: 0 0 15rem; position: sticky; top: 2rem; align-self: flex-start;
+    max-height: calc(100vh - 4rem); overflow: auto; font-size: 13px; line-height: 1.6;
+    border-left: 1px solid var(--b3-border-color); padding-left: 1rem; }
+.sp-toc__label { font-weight: 600; margin-bottom: .5rem; color: var(--b3-theme-on-surface); }
+.sp-toc__item { display: block; padding: 2px 0; color: var(--b3-theme-on-surface);
+    text-decoration: none; overflow: hidden; text-overflow: ellipsis; }
+.sp-toc__item:hover { color: var(--b3-theme-primary); }
+.sp-toc__item--l2 { padding-left: .75rem; }
+.sp-toc__item--l3 { padding-left: 1.5rem; }
+.sp-toc__item--l4 { padding-left: 2.25rem; }
+.sp-toc__item--l5 { padding-left: 3rem; }
+.sp-toc__item--l6 { padding-left: 3.75rem; }
+.sp-doc { margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--b3-border-color); }
+.sp-doc__title { font-size: 1.6em; line-height: 1.3; margin: 0 0 1rem; font-weight: 600; }
+.sp-ref { color: var(--b3-theme-primary); text-decoration: none; border-bottom: 1px solid currentColor; }
+@media (max-width: 1100px) {
+    .sp-shell { flex-direction: column; gap: 1.5rem; max-width: __WIDTH__; }
+    .sp-page { order: 2; max-width: 100%; }
+    .sp-toc { order: 1; position: static; flex: none; width: 100%; max-height: none;
+        border-left: 0; padding-left: 0; }
+}
 `;
 
 export async function buildSinglePageSite(docId: string, options: BuildOptions): Promise<BuiltSite> {
-    const response = await request<PreviewHTMLResponse>("/api/export/exportPreviewHTML", {
-        id: docId,
-        keepFold: false,
-        merge: false,
-        image: false,
-    });
-    if (!response.ok || !response.data) {
-        throw new Error(response.raw.msg || "exportPreviewHTML failed");
-    }
+    const main = await fetchPreview(docId);
 
     const warnings: string[] = [];
     const files = new Map<string, SiteFile>();
 
     const holder = document.createElement("div");
-    holder.innerHTML = response.data.content;
+    holder.innerHTML = main.content;
+
+    if (options.includeRefs) {
+        await appendReferencedDocs(holder, docId, warnings);
+    }
 
     sanitize(holder);
+    linkIncludedDocs(holder);
     stripSpriteIcons(holder);
     await renderMath(holder, warnings);
     await highlightCode(holder, warnings);
     await collectReferencedAssets(holder, files, warnings);
 
+    const toc = options.toc ? buildToc(holder, options) : "";
+
     const stylesheets = await collectStylesheets(files, warnings);
-    const title = response.data.name || "Untitled";
+    const title = main.name || "Untitled";
     const slug = options.slug;
     const canonical = canonicalHtml(holder);
 
-    const html = renderPage(title, holder.innerHTML, stylesheets, options);
+    const html = renderPage(title, holder.innerHTML, toc, stylesheets, options);
 
     const page = `/${slug}/index.html`;
     files.set(page, {
@@ -143,22 +166,276 @@ function contentFingerprint(
     const parts = [
         `title=${title}`,
         `addTitle=${options.addTitle}`,
-        `width=${options.contentWidth}`,
+        `width=${cssWidth(options.contentWidth)}`,
+        `toc=${options.toc}`,
+        `tocIncludeRefs=${options.tocIncludeRefs}`,
+        `tocLabel=${options.tocLabel}`,
+        `includeRefs=${options.includeRefs}`,
         `dom=${canonical}`,
         `files=${assets.join("\n")}`,
     ];
     return bytesToHex(blake3(utf8ToBytes(parts.join("\n\n"))));
 }
 
+// ------------------------------------------------------------------ preview
+
+async function fetchPreview(docId: string): Promise<PreviewHTMLResponse> {
+    const response = await request<PreviewHTMLResponse>("/api/export/exportPreviewHTML", {
+        id: docId,
+        keepFold: false,
+        merge: false,
+        image: false,
+    });
+    if (!response.ok || !response.data) {
+        throw new Error(response.raw.msg || "exportPreviewHTML failed");
+    }
+    return response.data;
+}
+
+// ------------------------------------------------------ referenced documents
+
+const SIYUAN_BLOCK_HREF = "siyuan://blocks/";
+
+interface RefSeed {
+    /** Block the reference points at; its document is what gets included. */
+    blockId: string;
+    /** Element to turn into an in-page link, or null when it carries content of its own. */
+    anchor: HTMLElement | null;
+}
+
+/**
+ * Appends the documents the body points at — via block references, document
+ * links or embed blocks — as sections of the same page. Only one level is
+ * followed: references inside an included document stay plain text.
+ */
+async function appendReferencedDocs(root: HTMLElement, docId: string, warnings: string[]): Promise<void> {
+    const seeds = collectRefSeeds(root);
+    if (seeds.length === 0) {
+        return;
+    }
+
+    const roots = await resolveRootIds([...new Set(seeds.map((seed) => seed.blockId))], warnings);
+    const wanted: string[] = [];
+    for (const seed of seeds) {
+        const target = roots.get(seed.blockId);
+        if (target && target !== docId && !wanted.includes(target)) {
+            wanted.push(target);
+        }
+    }
+
+    const included = new Set<string>();
+    for (const id of wanted) {
+        try {
+            const doc = await fetchPreview(id);
+            root.appendChild(buildDocSection(id, doc));
+            included.add(id);
+        } catch (error) {
+            warnings.push(`引用文档导出失败: ${id} (${String(error)})`);
+        }
+    }
+
+    // Stashed here and turned into anchors after `sanitize`, which strips the
+    // reference targets it cannot resolve.
+    for (const seed of seeds) {
+        const target = roots.get(seed.blockId);
+        if (seed.anchor && target && included.has(target)) {
+            seed.anchor.setAttribute("data-sp-doc", target);
+        }
+    }
+}
+
+/** One pass over the tree, so the sections keep the order of the references. */
+function collectRefSeeds(root: HTMLElement): RefSeed[] {
+    const seeds: RefSeed[] = [];
+    const push = (blockId: string | null | undefined, anchor: HTMLElement | null): void => {
+        const id = (blockId ?? "").trim();
+        if (BLOCK_ID.test(id)) {
+            seeds.push({ blockId: id, anchor });
+        }
+    };
+
+    root.querySelectorAll<HTMLElement>("*").forEach((element) => {
+        const type = element.getAttribute("data-type") ?? "";
+        const types = type.split(" ");
+
+        if (types.includes("block-ref")) {
+            push(element.getAttribute("data-id"), element);
+            return;
+        }
+        if (types.includes("a")) {
+            const href = element.getAttribute("data-href") ?? "";
+            if (href.startsWith(SIYUAN_BLOCK_HREF)) {
+                push(href.slice(SIYUAN_BLOCK_HREF.length).split(/[?#]/)[0], element);
+            }
+            return;
+        }
+        if (type === "NodeBlockQueryEmbed") {
+            // The embedded blocks are already rendered inside; their ids say
+            // which documents the content came from.
+            element.querySelectorAll<HTMLElement>("[data-id], [data-node-id]").forEach((embedded) => {
+                push(embedded.getAttribute("data-id") ?? embedded.getAttribute("data-node-id"), null);
+            });
+        }
+
+    });
+
+    return seeds;
+}
+
+/** Maps every block id to the document it lives in. */
+async function resolveRootIds(blockIds: string[], warnings: string[]): Promise<Map<string, string>> {
+    const roots = new Map<string, string>();
+    if (blockIds.length === 0) {
+        return roots;
+    }
+
+    // Every id was matched against `BLOCK_ID` before it got here, so the
+    // literals cannot carry quotes.
+    const list = blockIds.map((id) => `'${id}'`).join(",");
+    const response = await sql(`SELECT id, root_id FROM blocks WHERE id IN (${list}) LIMIT ${blockIds.length}`);
+    if (!response.ok || !Array.isArray(response.data)) {
+        warnings.push(`引用文档查询失败: ${response.raw.msg || "query/sql failed"}`);
+        return roots;
+    }
+
+    for (const row of response.data) {
+        if (row?.id && row?.root_id) {
+            roots.set(String(row.id), String(row.root_id));
+        }
+    }
+    return roots;
+}
+
+function buildDocSection(docId: string, doc: PreviewHTMLResponse): HTMLElement {
+    const section = document.createElement("section");
+    section.className = "sp-doc";
+    section.id = docAnchor(docId);
+
+    const heading = document.createElement("h2");
+    heading.className = "sp-doc__title";
+    heading.textContent = doc.name || "Untitled";
+
+    const body = document.createElement("div");
+    body.innerHTML = doc.content;
+
+    section.append(heading, ...[...body.childNodes]);
+    return section;
+}
+
+/** Turns the stashed references into links to the section that was appended. */
+function linkIncludedDocs(root: HTMLElement): void {
+    root.querySelectorAll<HTMLElement>("[data-sp-doc]").forEach((element) => {
+        const target = element.getAttribute("data-sp-doc") ?? "";
+        element.removeAttribute("data-sp-doc");
+        if (!BLOCK_ID.test(target)) {
+            return;
+        }
+
+        const anchor = document.createElement("a");
+        for (const attribute of [...element.attributes]) {
+            anchor.setAttribute(attribute.name, attribute.value);
+        }
+        anchor.classList.add("sp-ref");
+        anchor.setAttribute("href", `#${docAnchor(target)}`);
+        anchor.innerHTML = element.innerHTML;
+        element.replaceWith(anchor);
+    });
+}
+
+const docAnchor = (docId: string): string => `sp-doc-${docId}`;
+
+// ---------------------------------------------------------------------- toc
+
+interface TocEntry {
+    level: number;
+    id: string;
+    text: string;
+}
+
+/**
+ * A static table of contents: anchor ids are assigned by position so that two
+ * exports of an unchanged document produce the same page, and every entry is a
+ * plain `<a href="#...">` — no script on the published page.
+ */
+function buildToc(root: HTMLElement, options: BuildOptions): string {
+    const entries: TocEntry[] = [];
+    let counter = 0;
+    const anchorFor = (element: HTMLElement): string => {
+        const id = `sp-h-${++counter}`;
+        element.setAttribute("id", id);
+        return id;
+    };
+    const add = (element: HTMLElement, level: number): void => {
+        const text = headingText(element);
+        if (text) {
+            entries.push({ level, id: anchorFor(element), text });
+        }
+    };
+
+    const headings = [...root.querySelectorAll<HTMLElement>("[data-type='NodeHeading']")];
+    headings.filter((heading) => !heading.closest("section.sp-doc")).forEach((heading) => {
+        add(heading, headingLevel(heading));
+    });
+
+    if (options.tocIncludeRefs) {
+        root.querySelectorAll<HTMLElement>("section.sp-doc").forEach((section) => {
+            const title = section.querySelector<HTMLElement>(".sp-doc__title");
+            if (title) {
+                add(title, 1);
+            }
+            section.querySelectorAll<HTMLElement>("[data-type='NodeHeading']").forEach((heading) => {
+                add(heading, Math.min(6, headingLevel(heading) + 1));
+            });
+        });
+    }
+
+    if (entries.length === 0) {
+        return "";
+    }
+
+    const items = entries
+        .map((entry) => `            <a class="sp-toc__item sp-toc__item--l${entry.level}" href="#${escapeAttr(entry.id)}">${escapeHtml(entry.text)}</a>`)
+        .join("\n");
+
+    return `        <aside class="sp-toc">
+        <nav>
+            <div class="sp-toc__label">${escapeHtml(options.tocLabel)}</div>
+${items}
+        </nav>
+        </aside>`;
+}
+
+function headingLevel(heading: HTMLElement): number {
+    const match = /^h([1-6])$/.exec(heading.getAttribute("data-subtype") ?? "");
+    return match ? Number(match[1]) : 2;
+}
+
+/** The heading text without the block's own attribute markers. */
+function headingText(heading: HTMLElement): string {
+    const clone = heading.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll(".protyle-attr, .protyle-action").forEach((node) => node.remove());
+    return (clone.textContent ?? "").replace(/\s+/g, " ").trim();
+}
+
 // ---------------------------------------------------------------- page shell
 
-function renderPage(title: string, body: string, stylesheets: string[], options: BuildOptions): string {
+function renderPage(
+    title: string,
+    body: string,
+    toc: string,
+    stylesheets: string[],
+    options: BuildOptions,
+): string {
     const appearance = siyuanAppearance();
     const links = stylesheets
         .map((href) => `    <link rel="stylesheet" href="${escapeAttr(href)}">`)
         .join("\n");
 
     const heading = options.addTitle ? `<h1 class="sp-title">${escapeHtml(title)}</h1>` : "";
+    const width = cssWidth(options.contentWidth);
+    const style = PAGE_STYLE
+        .replace(/__SHELL_WIDTH__/g, toc ? `calc(${width} + 17.5rem)` : width)
+        .replace(/__WIDTH__/g, width);
 
     return `<!DOCTYPE html>
 <html lang="${escapeAttr(siyuanLang())}" data-theme-mode="light" data-light-theme="${escapeAttr(appearance.light)}" data-dark-theme="${escapeAttr(appearance.dark)}">
@@ -167,19 +444,29 @@ function renderPage(title: string, body: string, stylesheets: string[], options:
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>${escapeHtml(title)}</title>
 ${links}
-    <style>${PAGE_STYLE.replace("__WIDTH__", options.contentWidth)}</style>
+    <style>${style}</style>
 </head>
 <body>
-    <main class="sp-page">
+    <div class="sp-shell">
+        <main class="sp-page">
         ${heading}
         <div class="protyle-wysiwyg protyle-wysiwyg--attr">
 ${body}
         </div>
-    </main>
+        </main>
+${toc}
+    </div>
 </body>
 </html>
 `;
 }
+
+/** The width lands inside a `<style>` block, so only a plain CSS length passes. */
+function cssWidth(value: string): string {
+    const width = value.trim();
+    return /^\d+(\.\d+)?(px|rem|em|%|vw|ch)$/.test(width) ? width : "800px";
+}
+
 
 // ------------------------------------------------------------------ cleanup
 
