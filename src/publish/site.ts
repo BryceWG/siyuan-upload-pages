@@ -23,8 +23,7 @@ const SLUG_LENGTH = 10;
  * title degraded to a document id, and stray latin letters inside a CJK title
  * produced meaningless fragments. The link no longer carries the title at all.
  */
-export const randomSlug = (): string =>
-    crypto.randomUUID().replace(/-/g, "").slice(0, SLUG_LENGTH);
+export const randomSlug = (): string => crypto.randomUUID().replace(/-/g, "").slice(0, SLUG_LENGTH);
 
 export const totalSize = (files: SiteFile[]): number =>
     files.reduce((sum, file) => sum + file.bytes.length, 0);

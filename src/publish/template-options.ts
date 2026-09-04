@@ -69,13 +69,13 @@ export class TemplateOptionStore {
     }
 }
 
-
-
 /** The file is user-editable and may predate an option, so every field is checked. */
 function normalize(value: any): TemplateOptions {
     const source = typeof value === "object" && value !== null ? value : {};
     const flag = (name: keyof TemplateOptions): boolean =>
-        typeof source[name] === "boolean" ? source[name] : (DEFAULT_TEMPLATE_OPTIONS[name] as boolean);
+        typeof source[name] === "boolean"
+            ? source[name]
+            : (DEFAULT_TEMPLATE_OPTIONS[name] as boolean);
 
     const width = String(source.contentWidth ?? "").trim();
     return {

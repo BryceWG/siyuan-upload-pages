@@ -39,7 +39,10 @@ const PROVIDER_LABELS: Record<string, string> = {
     vercel: "Vercel",
 };
 
-export function openRecordsDialog(text: RecordsDialogText, callbacks: RecordsDialogCallbacks): void {
+export function openRecordsDialog(
+    text: RecordsDialogText,
+    callbacks: RecordsDialogCallbacks
+): void {
     const dialog = new Dialog({
         title: text.title,
         content: `<div class="b3-dialog__content sp-records-content"></div>`,
@@ -63,7 +66,7 @@ function buildBody(
     records: PublishRecord[],
     text: RecordsDialogText,
     callbacks: RecordsDialogCallbacks,
-    render: () => void,
+    render: () => void
 ): HTMLElement {
     if (records.length === 0) {
         const empty = document.createElement("div");
@@ -77,7 +80,11 @@ function buildBody(
 
     const headRow = document.createElement("tr");
     for (const label of [
-        text.colDoc, text.colProvider, text.colPublishedAt, text.colUpdatedAt, text.colActions,
+        text.colDoc,
+        text.colProvider,
+        text.colPublishedAt,
+        text.colUpdatedAt,
+        text.colActions,
     ]) {
         const th = document.createElement("th");
         th.textContent = label;
@@ -98,7 +105,7 @@ function buildRow(
     record: PublishRecord,
     text: RecordsDialogText,
     callbacks: RecordsDialogCallbacks,
-    render: () => void,
+    render: () => void
 ): HTMLTableRowElement {
     const row = document.createElement("tr");
 
@@ -149,6 +156,8 @@ const cell = (value: string): HTMLTableCellElement => {
 const formatTime = (ms: number): string => {
     const date = new Date(ms);
     const pad = (value: number): string => String(value).padStart(2, "0");
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-        + ` ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    return (
+        `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+        ` ${pad(date.getHours())}:${pad(date.getMinutes())}`
+    );
 };

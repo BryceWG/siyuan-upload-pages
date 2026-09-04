@@ -4,13 +4,13 @@
  * @Date         : 2024-09-06 17:42:57
  * @FilePath     : /scripts/utils.js
  * @LastEditTime : 2024-09-06 19:23:12
- * @Description  : 
+ * @Description  :
  */
 // common.js
-import fs from 'fs';
-import path from 'node:path';
-import http from 'node:http';
-import readline from 'node:readline';
+import fs from "fs";
+import path from "node:path";
+import http from "node:http";
+import readline from "node:readline";
 
 // Logging functions
 export const log = (info) => console.log(`\x1B[36m%s\x1B[0m`, info);
@@ -25,19 +25,19 @@ export const POST_HEADER = {
 export async function myfetch(url, options) {
     return new Promise((resolve, reject) => {
         let req = http.request(url, options, (res) => {
-            let data = '';
-            res.on('data', (chunk) => {
+            let data = "";
+            res.on("data", (chunk) => {
                 data += chunk;
             });
-            res.on('end', () => {
+            res.on("end", () => {
                 resolve({
                     ok: true,
                     status: res.statusCode,
-                    json: () => JSON.parse(data)
+                    json: () => JSON.parse(data),
                 });
             });
         });
-        req.on('error', (e) => {
+        req.on("error", (e) => {
             reject(e);
         });
         req.end();
@@ -49,25 +49,23 @@ export async function myfetch(url, options) {
  * @returns {Promise<Object | null>}
  */
 export async function getSiYuanDir() {
-    let url = 'http://127.0.0.1:6806/api/system/getWorkspaces';
-    let conf = {};
+    const url = "http://127.0.0.1:6806/api/system/getWorkspaces";
     try {
-        let response = await myfetch(url, {
-            method: 'POST',
-            headers: POST_HEADER
+        const response = await myfetch(url, {
+            method: "POST",
+            headers: POST_HEADER,
         });
         if (response.ok) {
-            conf = await response.json();
-        } else {
-            error(`\tHTTP-Error: ${response.status}`);
-            return null;
+            const conf = await response.json();
+            return conf?.data; // 保持原始返回值
         }
+        error(`\tHTTP-Error: ${response.status}`);
+        return null;
     } catch (e) {
         error(`\tError: ${e}`);
         error("\tPlease make sure SiYuan is running!!!");
         return null;
     }
-    return conf?.data; // 保持原始返回值
 }
 
 /**
@@ -77,7 +75,7 @@ export async function getSiYuanDir() {
  */
 export async function chooseTarget(workspaces) {
     let count = workspaces.length;
-    log(`>>> Got ${count} SiYuan ${count > 1 ? 'workspaces' : 'workspace'}`);
+    log(`>>> Got ${count} SiYuan ${count > 1 ? "workspaces" : "workspace"}`);
     workspaces.forEach((workspace, i) => {
         log(`\t[${i}] ${workspace.path}`);
     });
@@ -87,7 +85,7 @@ export async function chooseTarget(workspaces) {
     } else {
         const rl = readline.createInterface({
             input: process.stdin,
-            output: process.stdout
+            output: process.stdout,
         });
         let index = await new Promise((resolve) => {
             rl.question(`\tPlease select a workspace[0-${count - 1}]: `, (answer) => {
@@ -106,30 +104,30 @@ export async function chooseTarget(workspaces) {
  * @returns {boolean}
  */
 export function cmpPath(path1, path2) {
-    path1 = path1.replace(/\\/g, '/');
-    path2 = path2.replace(/\\/g, '/');
-    if (path1[path1.length - 1] !== '/') {
-        path1 += '/';
+    path1 = path1.replace(/\\/g, "/");
+    path2 = path2.replace(/\\/g, "/");
+    if (path1[path1.length - 1] !== "/") {
+        path1 += "/";
     }
-    if (path2[path2.length - 1] !== '/') {
-        path2 += '/';
+    if (path2[path2.length - 1] !== "/") {
+        path2 += "/";
     }
     return path1 === path2;
 }
 
 export function getThisPluginName() {
-    if (!fs.existsSync('./plugin.json')) {
-        process.chdir('../');
-        if (!fs.existsSync('./plugin.json')) {
-            error('Failed! plugin.json not found');
+    if (!fs.existsSync("./plugin.json")) {
+        process.chdir("../");
+        if (!fs.existsSync("./plugin.json")) {
+            error("Failed! plugin.json not found");
             return null;
         }
     }
 
-    const plugin = JSON.parse(fs.readFileSync('./plugin.json', 'utf8'));
+    const plugin = JSON.parse(fs.readFileSync("./plugin.json", "utf8"));
     const name = plugin?.name;
     if (!name) {
-        error('Failed! Please set plugin name in plugin.json');
+        error("Failed! Please set plugin name in plugin.json");
         return null;
     }
 
@@ -156,13 +154,12 @@ export function copyDirectory(srcDir, dstDir) {
     log(`All files copied!`);
 }
 
-
 export function makeSymbolicLink(srcPath, targetPath) {
     if (!fs.existsSync(targetPath)) {
         // fs.symlinkSync(srcPath, targetPath, 'junction');
         //Go 1.23 no longer supports junctions as symlinks
         //Please refer to https://github.com/siyuan-note/siyuan/issues/12399
-        fs.symlinkSync(srcPath, targetPath, 'dir');
+        fs.symlinkSync(srcPath, targetPath, "dir");
         log(`Done! Created symlink ${targetPath}`);
         return;
     }

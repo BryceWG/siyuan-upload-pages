@@ -7,7 +7,6 @@
  * @Description  : Frequently used data structures in SiYuan
  */
 
-
 type DocumentId = string;
 type BlockId = string;
 type NotebookId = string;
@@ -20,7 +19,7 @@ type Notebook = {
     icon: string;
     sort: number;
     closed: boolean;
-}
+};
 
 type NotebookConf = {
     name: string;
@@ -29,29 +28,61 @@ type NotebookConf = {
     createDocNameTemplate: string;
     dailyNoteSavePath: string;
     dailyNoteTemplatePath: string;
-}
+};
 
-type BlockType = 
-    | 'd'
-    | 'p'
-    | 'query_embed'
-    | 'l'
-    | 'i'
-    | 'h'
-    | 'iframe'
-    | 'tb'
-    | 'b'
-    | 's'
-    | 'c'
-    | 'widget'
-    | 't'
-    | 'html'
-    | 'm'
-    | 'av'
-    | 'audio';
+type BlockType =
+    | "d"
+    | "p"
+    | "query_embed"
+    | "l"
+    | "i"
+    | "h"
+    | "iframe"
+    | "tb"
+    | "b"
+    | "s"
+    | "c"
+    | "widget"
+    | "t"
+    | "html"
+    | "m"
+    | "av"
+    | "audio";
 
-
-type BlockSubType = "d1" | "d2" | "s1" | "s2" | "s3" | "t1" | "t2" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "table" | "task" | "toggle" | "latex" | "quote" | "html" | "code" | "footnote" | "cite" | "collection" | "bookmark" | "attachment" | "comment" | "mindmap" | "spreadsheet" | "calendar" | "image" | "audio" | "video" | "other";
+type BlockSubType =
+    | "d1"
+    | "d2"
+    | "s1"
+    | "s2"
+    | "s3"
+    | "t1"
+    | "t2"
+    | "h1"
+    | "h2"
+    | "h3"
+    | "h4"
+    | "h5"
+    | "h6"
+    | "table"
+    | "task"
+    | "toggle"
+    | "latex"
+    | "quote"
+    | "html"
+    | "code"
+    | "footnote"
+    | "cite"
+    | "collection"
+    | "bookmark"
+    | "attachment"
+    | "comment"
+    | "mindmap"
+    | "spreadsheet"
+    | "calendar"
+    | "image"
+    | "audio"
+    | "video"
+    | "other";
 
 type Block = {
     id: BlockId;
@@ -71,14 +102,14 @@ type Block = {
     length: number;
     type: BlockType;
     subtype: BlockSubType;
-    /** string of { [key: string]: string } 
-     * For instance: "{: custom-type=\"query-code\" id=\"20230613234017-zkw3pr0\" updated=\"20230613234509\"}" 
+    /** string of { [key: string]: string }
+     * For instance: "{: custom-type=\"query-code\" id=\"20230613234017-zkw3pr0\" updated=\"20230613234509\"}"
      */
     ial?: string;
     sort: number;
     created: string;
     updated: string;
-}
+};
 
 type doOperation = {
     action: string;
@@ -87,7 +118,7 @@ type doOperation = {
     parentID: BlockId | DocumentId;
     previousID: BlockId;
     retData: null;
-}
+};
 
 interface Window {
     siyuan: {

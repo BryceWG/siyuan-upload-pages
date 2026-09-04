@@ -4,6 +4,7 @@
 package-lock.json
 *.tsbuildinfo
 .svelte-check/
+.eslintcache
 package.zip
 node_modules
 dev

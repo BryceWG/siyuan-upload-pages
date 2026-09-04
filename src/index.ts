@@ -6,11 +6,16 @@ import { SettingUtils } from "./libs/setting-utils";
 import { openRecordsDialog } from "./records-dialog";
 import { openPublishOptionsDialog } from "./publish-options-dialog";
 import { buildSinglePageSite } from "./publish/site-builder";
-import { ProviderConfig, ProviderId, PublishTarget, SiteManifest, createTarget } from "./publish/provider";
+import {
+    ProviderConfig,
+    ProviderId,
+    PublishTarget,
+    SiteManifest,
+    createTarget,
+} from "./publish/provider";
 import { PublishRecord, RecordStore } from "./publish/records";
 import { TemplateOptionStore } from "./publish/template-options";
 import { LoadStatus } from "./publish/storage";
-
 
 import { formatSize, randomSlug, totalSize } from "./publish/site";
 
@@ -29,9 +34,7 @@ export default class PublishPlugin extends Plugin {
     private settingsReady: Promise<LoadStatus>;
     private publishing = false;
 
-
     private isMobile: boolean;
-
 
     onload() {
         const frontEnd = getFrontend();
@@ -70,15 +73,15 @@ export default class PublishPlugin extends Plugin {
     /** A file that could not be read is worth surfacing, not just logging. */
     private reportLoad(name: string, status: LoadStatus) {
         if (status === "unreadable") {
-            console.error(`[publish-pages] ${name}.json could not be read; it will not be overwritten`);
+            console.error(
+                `[publish-pages] ${name}.json could not be read; it will not be overwritten`
+            );
             showMessage(`${this.i18n.dataNotLoaded}: ${name}.json`, 0, "error");
         }
     }
 
-
     onLayoutReady() {
         this.addTopBar({
-
             icon: "iconPublishPages",
             title: this.i18n.publishCurrentDoc,
             position: "right",
@@ -116,9 +119,9 @@ export default class PublishPlugin extends Plugin {
         this.settingUtils = new SettingUtils({
             plugin: this,
             name: STORAGE_NAME,
-            onSaveError: () => showMessage(`${this.i18n.settingsSaveFailed}: ${STORAGE_NAME}.json`, 0, "error"),
+            onSaveError: () =>
+                showMessage(`${this.i18n.settingsSaveFailed}: ${STORAGE_NAME}.json`, 0, "error"),
         });
-
 
         this.settingUtils.addItem({
             key: "provider",
@@ -134,7 +137,6 @@ export default class PublishPlugin extends Plugin {
                 callback: () => this.applyProviderVisibility(),
             },
         });
-
 
         this.settingUtils.addItem({
             key: "accountId",
@@ -226,7 +228,6 @@ export default class PublishPlugin extends Plugin {
                 callback: () => this.showRecordsDialog(),
             },
         });
-
     }
 
     /**
@@ -287,26 +288,27 @@ export default class PublishPlugin extends Plugin {
             this.templateOptions.ready(),
         ]);
 
-        const broken = [STORAGE_NAME, RECORDS_NAME, TEMPLATE_NAME]
-            .filter((_, index) => statuses[index] === "unreadable");
+        const broken = [STORAGE_NAME, RECORDS_NAME, TEMPLATE_NAME].filter(
+            (_, index) => statuses[index] === "unreadable"
+        );
 
         if (broken.length > 0) {
-            showMessage(`${this.i18n.dataNotLoaded}: ${broken.map((name) => `${name}.json`).join(", ")}`, 0, "error");
+            showMessage(
+                `${this.i18n.dataNotLoaded}: ${broken.map((name) => `${name}.json`).join(", ")}`,
+                0,
+                "error"
+            );
             return false;
         }
         return true;
     }
-
-
 
     /**
      * Reads the settings of `provider`, defaulting to the selected one — a
      * record can be managed even when its channel is not currently selected.
      */
     private providerConfig(provider: ProviderId = this.selectedProvider()): ProviderConfig {
-
         if (provider === "vercel") {
-
             return {
                 provider: "vercel",
                 token: this.read("vercelToken"),
@@ -338,7 +340,7 @@ export default class PublishPlugin extends Plugin {
     }
 
     private async checkOrCreateProject() {
-        if (!await this.dataReady()) {
+        if (!(await this.dataReady())) {
             return;
         }
 
@@ -357,7 +359,6 @@ export default class PublishPlugin extends Plugin {
         }
     }
 
-
     // -------------------------------------------------------------- publish
 
     private async publishCurrentDoc() {
@@ -372,7 +373,7 @@ export default class PublishPlugin extends Plugin {
             return;
         }
 
-        if (!await this.dataReady()) {
+        if (!(await this.dataReady())) {
             return;
         }
 
@@ -421,7 +422,7 @@ export default class PublishPlugin extends Plugin {
 
             showMessage(
                 `${this.i18n.uploading}: ${site.files.length} / ${formatSize(totalSize(site.files))}`,
-                4000,
+                4000
             );
 
             // Everything the previous deployment served is carried over, so
@@ -429,7 +430,7 @@ export default class PublishPlugin extends Plugin {
             const result = await target.deploy(
                 site.files,
                 this.records.manifest(provider),
-                (message) => showMessage(message, 3000),
+                (message) => showMessage(message, 3000)
             );
             await this.records.setManifest(provider, result.manifest);
 
@@ -470,7 +471,7 @@ export default class PublishPlugin extends Plugin {
                 tocIncludeRefsDesc: this.i18n.optionTocIncludeRefsDesc,
                 publish: this.i18n.optionsPublish,
             },
-            this.templateOptions.get(),
+            this.templateOptions.get()
         );
     }
 
@@ -496,12 +497,11 @@ export default class PublishPlugin extends Plugin {
     // --------------------------------------------------------------- records
 
     private async showRecordsDialog(): Promise<void> {
-        if (!await this.dataReady()) {
+        if (!(await this.dataReady())) {
             return;
         }
 
         openRecordsDialog(
-
             {
                 title: this.i18n.recordsTitle,
                 empty: this.i18n.recordsEmpty,
@@ -525,7 +525,7 @@ export default class PublishPlugin extends Plugin {
                     showMessage(this.i18n.recordsCopyIdOk, 3000);
                 },
                 onDelete: (record) => this.deletePublish(record),
-            },
+            }
         );
     }
 
@@ -536,11 +536,11 @@ export default class PublishPlugin extends Plugin {
         if (invalid) {
             // Without the channel credentials the deployment cannot be removed
             // remotely; dropping just the record keeps the row manageable.
-            if (!await this.confirmDelete(this.i18n.recordsDeleteLocalOnly, record)) {
+            if (!(await this.confirmDelete(this.i18n.recordsDeleteLocalOnly, record))) {
                 return false;
             }
         } else {
-            if (!await this.confirmDelete(this.i18n.recordsDeleteQuestion, record)) {
+            if (!(await this.confirmDelete(this.i18n.recordsDeleteQuestion, record))) {
                 return false;
             }
 
@@ -575,7 +575,6 @@ export default class PublishPlugin extends Plugin {
         await this.records.setManifest(record.provider, result.manifest);
     }
 
-
     /** confirmDialog with a DOM body, so record fields never pass through innerHTML. */
     private confirmDelete(question: string, record: PublishRecord): Promise<boolean> {
         return new Promise((resolve) => {
@@ -607,12 +606,14 @@ export default class PublishPlugin extends Plugin {
             this.templateOptions.backupName,
             `${STORAGE_NAME}.bak.json`,
         ];
-        await Promise.all(files.map((file) => this.removeData(file).catch((error) => {
-            console.warn(`[publish-pages] ${file} could not be removed`, error);
-        })));
+        await Promise.all(
+            files.map((file) =>
+                this.removeData(file).catch((error) => {
+                    console.warn(`[publish-pages] ${file} could not be removed`, error);
+                })
+            )
+        );
     }
-
-
 }
 
 /** The token must never reach a message box or the console. */
@@ -621,7 +622,7 @@ function errorMessage(error: unknown): string {
 }
 
 const copyToClipboard = (text: string): void => {
-    navigator.clipboard?.writeText(text).catch(() => { });
+    navigator.clipboard?.writeText(text).catch(() => {});
 };
 
 function activeDocumentId(): string | null {

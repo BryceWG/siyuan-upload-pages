@@ -73,4 +73,3 @@ export function createTarget(config: ProviderConfig): PublishTarget {
         deleteDeployment: (deploymentId) => cloudflare.deleteDeployment(config, deploymentId),
     };
 }
-

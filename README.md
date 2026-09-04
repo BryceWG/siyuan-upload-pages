@@ -88,7 +88,9 @@ Records are stored in `data/storage/petal/siyuan-upload-pages/publish-records.js
 pnpm install
 pnpm run dev          # emits to dev/, use together with make-link
 pnpm run build        # emits to dist/ and packs package.zip
-pnpm run check        # tsc + svelte-check
+pnpm run check        # tsc + svelte-check + eslint + prettier
+pnpm run lint:fix     # auto-fix ESLint issues
+pnpm run format       # rewrite files to Prettier style
 ```
 
 ## Limitations

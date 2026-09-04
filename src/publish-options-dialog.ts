@@ -26,7 +26,7 @@ export interface PublishOptionsText {
 /** Resolves with the chosen options, or null when the dialog is dismissed. */
 export function openPublishOptionsDialog(
     text: PublishOptionsText,
-    initial: TemplateOptions,
+    initial: TemplateOptions
 ): Promise<TemplateOptions | null> {
     return new Promise((resolve) => {
         let settled = false;
@@ -57,8 +57,16 @@ export function openPublishOptionsDialog(
         const addTitle = switchRow(text.addTitle, "", initial.addTitle);
         const includeRefs = switchRow(text.includeRefs, text.includeRefsDesc, initial.includeRefs);
         const toc = switchRow(text.toc, text.tocDesc, initial.toc);
-        const tocIncludeRefs = switchRow(text.tocIncludeRefs, text.tocIncludeRefsDesc, initial.tocIncludeRefs);
-        const contentWidth = textRow(text.contentWidth, text.contentWidthDesc, initial.contentWidth);
+        const tocIncludeRefs = switchRow(
+            text.tocIncludeRefs,
+            text.tocIncludeRefsDesc,
+            initial.tocIncludeRefs
+        );
+        const contentWidth = textRow(
+            text.contentWidth,
+            text.contentWidthDesc,
+            initial.contentWidth
+        );
 
         // Listing the referenced documents only makes sense once there is both
         // a table of contents and referenced documents in the page.
@@ -83,7 +91,8 @@ export function openPublishOptionsDialog(
                 addTitle: addTitle.input.checked,
                 contentWidth: contentWidth.input.value.trim(),
                 toc: toc.input.checked,
-                tocIncludeRefs: toc.input.checked && includeRefs.input.checked && tocIncludeRefs.input.checked,
+                tocIncludeRefs:
+                    toc.input.checked && includeRefs.input.checked && tocIncludeRefs.input.checked,
                 includeRefs: includeRefs.input.checked,
             });
             dialog.destroy();

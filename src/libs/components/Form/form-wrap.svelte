@@ -10,16 +10,11 @@
     interface Props {
         title: string;
         description: string;
-        direction?: 'row' | 'column';
-        children?: import('svelte').Snippet;
+        direction?: "row" | "column";
+        children?: import("svelte").Snippet;
     }
 
-    let {
-        title,
-        description,
-        direction = 'column',
-        children
-    }: Props = $props();
+    let { title, description, direction = "column", children }: Props = $props();
 </script>
 
 {#if direction === "row"}
@@ -49,7 +44,7 @@
 <style>
     span.title {
         font-weight: bold;
-        color: var(--b3-theme-primary)
+        color: var(--b3-theme-primary);
     }
     .item-wrap.b3-label {
         box-shadow: none !important;
@@ -67,5 +62,4 @@
         gap: 5px;
         position: relative;
     }
-
 </style>

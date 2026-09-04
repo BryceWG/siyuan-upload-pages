@@ -4,24 +4,31 @@
  * @Date         : 2024-03-28 20:03:59
  * @FilePath     : /scripts/make_install.js
  * @LastEditTime : 2024-09-06 18:08:19
- * @Description  : 
+ * @Description  :
  */
 // make_install.js
-import fs from 'fs';
-import { log, error, getSiYuanDir, chooseTarget, copyDirectory, getThisPluginName } from './utils.js';
+import fs from "fs";
+import {
+    log,
+    error,
+    getSiYuanDir,
+    chooseTarget,
+    copyDirectory,
+    getThisPluginName,
+} from "./utils.js";
 
-let targetDir = '';
+let targetDir = "";
 
 /**
  * 1. Get the parent directory to install the plugin
  */
 log('>>> Try to visit constant "targetDir" in make_install.js...');
-if (targetDir === '') {
+if (targetDir === "") {
     log('>>> Constant "targetDir" is empty, try to get SiYuan directory automatically....');
     let res = await getSiYuanDir();
 
     if (res === null || res === undefined || res.length === 0) {
-        error('>>> Can not get SiYuan directory automatically');
+        error(">>> Can not get SiYuan directory automatically");
         process.exit(1);
     } else {
         targetDir = await chooseTarget(res);
@@ -30,7 +37,7 @@ if (targetDir === '') {
 }
 if (!fs.existsSync(targetDir)) {
     error(`Failed! Plugin directory not exists: "${targetDir}"`);
-    error('Please set the plugin directory in scripts/make_install.js');
+    error("Please set the plugin directory in scripts/make_install.js");
     process.exit(1);
 }
 

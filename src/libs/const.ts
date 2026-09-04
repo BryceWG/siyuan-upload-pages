@@ -4,52 +4,50 @@
  * @Date         : 2024-06-08 20:36:30
  * @FilePath     : /src/libs/const.ts
  * @LastEditTime : 2024-06-08 20:48:06
- * @Description  : 
+ * @Description  :
  */
 
-
-export const BlockType2NodeType: {[key in BlockType]: string} = {
-    d: 'NodeDocument',
-    p: 'NodeParagraph',
-    query_embed: 'NodeBlockQueryEmbed',
-    l: 'NodeList',
-    i: 'NodeListItem',
-    h: 'NodeHeading',
-    iframe: 'NodeIFrame',
-    tb: 'NodeThematicBreak',
-    b: 'NodeBlockquote',
-    s: 'NodeSuperBlock',
-    c: 'NodeCodeBlock',
-    widget: 'NodeWidget',
-    t: 'NodeTable',
-    html: 'NodeHTMLBlock',
-    m: 'NodeMathBlock',
-    av: 'NodeAttributeView',
-    audio: 'NodeAudio'
-}
-
+export const BlockType2NodeType: { [key in BlockType]: string } = {
+    d: "NodeDocument",
+    p: "NodeParagraph",
+    query_embed: "NodeBlockQueryEmbed",
+    l: "NodeList",
+    i: "NodeListItem",
+    h: "NodeHeading",
+    iframe: "NodeIFrame",
+    tb: "NodeThematicBreak",
+    b: "NodeBlockquote",
+    s: "NodeSuperBlock",
+    c: "NodeCodeBlock",
+    widget: "NodeWidget",
+    t: "NodeTable",
+    html: "NodeHTMLBlock",
+    m: "NodeMathBlock",
+    av: "NodeAttributeView",
+    audio: "NodeAudio",
+};
 
 export const NodeIcons = {
     NodeAttributeView: {
-        icon: "iconDatabase"
+        icon: "iconDatabase",
     },
     NodeAudio: {
-        icon: "iconRecord"
+        icon: "iconRecord",
     },
     NodeBlockQueryEmbed: {
-        icon: "iconSQL"
+        icon: "iconSQL",
     },
     NodeBlockquote: {
-        icon: "iconQuote"
+        icon: "iconQuote",
     },
     NodeCodeBlock: {
-        icon: "iconCode"
+        icon: "iconCode",
     },
     NodeDocument: {
-        icon: "iconFile"
+        icon: "iconFile",
     },
     NodeHTMLBlock: {
-        icon: "iconHTML5"
+        icon: "iconHTML5",
     },
     NodeHeading: {
         icon: "iconHeadings",
@@ -59,41 +57,41 @@ export const NodeIcons = {
             h3: { icon: "iconH3" },
             h4: { icon: "iconH4" },
             h5: { icon: "iconH5" },
-            h6: { icon: "iconH6" }
-        }
+            h6: { icon: "iconH6" },
+        },
     },
     NodeIFrame: {
-        icon: "iconLanguage"
+        icon: "iconLanguage",
     },
     NodeList: {
         subtypes: {
             o: { icon: "iconOrderedList" },
             t: { icon: "iconCheck" },
-            u: { icon: "iconList" }
-        }
+            u: { icon: "iconList" },
+        },
     },
     NodeListItem: {
-        icon: "iconListItem"
+        icon: "iconListItem",
     },
     NodeMathBlock: {
-        icon: "iconMath"
+        icon: "iconMath",
     },
     NodeParagraph: {
-        icon: "iconParagraph"
+        icon: "iconParagraph",
     },
     NodeSuperBlock: {
-        icon: "iconSuper"
+        icon: "iconSuper",
     },
     NodeTable: {
-        icon: "iconTable"
+        icon: "iconTable",
     },
     NodeThematicBreak: {
-        icon: "iconLine"
+        icon: "iconLine",
     },
     NodeVideo: {
-        icon: "iconVideo"
+        icon: "iconVideo",
     },
     NodeWidget: {
-        icon: "iconBoth"
-    }
+        icon: "iconBoth",
+    },
 };

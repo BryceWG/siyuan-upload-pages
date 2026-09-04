@@ -90,7 +90,9 @@
 pnpm install
 pnpm run dev          # 输出到 dev/，配合 make-link 使用
 pnpm run build        # 输出到 dist/ 并打包 package.zip
-pnpm run check        # tsc + svelte-check
+pnpm run check        # tsc + svelte-check + eslint + prettier
+pnpm run lint:fix     # 自动修复 ESLint 问题
+pnpm run format       # 按 Prettier 重写文件格式
 ```
 
 ## 已知限制

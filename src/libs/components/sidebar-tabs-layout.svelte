@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type { Snippet } from 'svelte';
+    import type { Snippet } from "svelte";
 
     export interface SidebarTab {
         key: string;
@@ -13,12 +13,7 @@
         onactivechange?: (detail: { key: string }) => void;
     }
 
-    let {
-        tabs,
-        initialKey,
-        content,
-        onactivechange
-    }: Props = $props();
+    let { tabs, initialKey, content, onactivechange }: Props = $props();
 
     let activeKey = $state<string | undefined>();
 
@@ -38,7 +33,7 @@
     }
 
     function handleTabKeydown(event: KeyboardEvent, tab: SidebarTab) {
-        if (event.key === 'Enter' || event.key === ' ') {
+        if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
             selectTab(tab);
         }

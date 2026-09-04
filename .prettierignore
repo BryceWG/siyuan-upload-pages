@@ -1,0 +1,21 @@
+node_modules
+dev
+dist
+build
+tmp
+package.zip
+pnpm-lock.yaml
+.svelte-check
+.eslintcache
+
+asset
+.banner-src
+*.png
+*.svg
+*.webp
+*.gif
+*.ico
+
+# Keep hand-wrapped docs as-is.
+*.md
+docs

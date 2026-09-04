@@ -10,10 +10,12 @@ PaperKite (`siyuan-upload-pages`) — a SiYuan plugin that publishes the current
 pnpm install
 pnpm run dev     # watch build → dev/ (pairs with make-link to load in a running SiYuan)
 pnpm run build   # production build → dist/ + package.zip
-pnpm run check   # tsc --noEmit (both tsconfigs) + svelte-check — this is the only "test"/lint gate
+pnpm run check   # tsc --noEmit (both tsconfigs) + svelte-check + eslint + prettier --check
+pnpm run lint    # eslint only
+pnpm run format  # prettier --write
 ```
 
-There are no unit tests; `pnpm run check` must pass before a change counts as done.
+There are no unit tests; `pnpm run check` must pass before a change counts as done. Style is Prettier (4-space indent, double quotes, semicolons) plus ESLint; do not hand-format against that.
 
 ## Layout
 

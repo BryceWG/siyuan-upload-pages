@@ -40,9 +40,11 @@ const isEnvelope = (value: any): value is Envelope =>
 
 /** The shape `/api/file/getFile` answers with when it fails. */
 const isKernelError = (value: any): boolean =>
-    typeof value === "object" && value !== null
-    && typeof value.code === "number" && typeof value.msg === "string"
-    && !("__store" in value);
+    typeof value === "object" &&
+    value !== null &&
+    typeof value.code === "number" &&
+    typeof value.msg === "string" &&
+    !("__store" in value);
 
 /**
  * A single JSON file, read once and written through a queue.
@@ -115,7 +117,9 @@ export class JsonStore<T> {
         if (primary.status === "unreadable") {
             const backup = classify(await this.storage.loadData(this.backupFile), this.parse);
             if (backup.status === "loaded") {
-                console.warn(`[publish-pages] ${this.file} was unreadable, recovered from ${this.backupFile}`);
+                console.warn(
+                    `[publish-pages] ${this.file} was unreadable, recovered from ${this.backupFile}`
+                );
                 this.value = backup.value;
                 this.status = "loaded";
                 // The mirror is the source of truth now; keep it until the next save.
@@ -155,7 +159,10 @@ export class JsonStore<T> {
         }
 
         this.value = value;
-        this.writing = this.writing.then(() => this.persist(value), () => this.persist(value));
+        this.writing = this.writing.then(
+            () => this.persist(value),
+            () => this.persist(value)
+        );
         await this.writing;
     }
 
@@ -168,8 +175,11 @@ export class JsonStore<T> {
         await this.storage.saveData(this.file, envelope);
         if (!this.backedUp) {
             await this.storage.saveData(this.backupFile, envelope).then(
-                () => { this.backedUp = true; },
-                (error) => console.warn(`[publish-pages] ${this.backupFile} could not be written`, error),
+                () => {
+                    this.backedUp = true;
+                },
+                (error) =>
+                    console.warn(`[publish-pages] ${this.backupFile} could not be written`, error)
             );
         }
     }
@@ -178,7 +188,7 @@ export class JsonStore<T> {
 /** Unwraps whatever `loadData` returned and hands the payload to `parse`. */
 function classify<T>(
     raw: unknown,
-    parse: (payload: unknown) => T | null,
+    parse: (payload: unknown) => T | null
 ): { status: "loaded"; value: T } | { status: "empty" | "unreadable" } {
     if (raw === undefined || raw === null) {
         return { status: "empty" };

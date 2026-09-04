@@ -78,7 +78,10 @@ img { max-width: 100%; }
 }
 `;
 
-export async function buildSinglePageSite(docId: string, options: BuildOptions): Promise<BuiltSite> {
+export async function buildSinglePageSite(
+    docId: string,
+    options: BuildOptions
+): Promise<BuiltSite> {
     const main = await fetchPreview(docId);
 
     const warnings: string[] = [];
@@ -96,8 +99,6 @@ export async function buildSinglePageSite(docId: string, options: BuildOptions):
     if (options.includeRefs) {
         await appendReferencedDocs(holder, docId, warnings);
     }
-
-
 
     sanitize(holder);
     linkIncludedDocs(holder);
@@ -131,7 +132,6 @@ export async function buildSinglePageSite(docId: string, options: BuildOptions):
         fingerprint: contentFingerprint(canonical, title, toc, options, files),
     };
 }
-
 
 // -------------------------------------------------------------- fingerprint
 
@@ -179,7 +179,7 @@ function contentFingerprint(
     title: string,
     toc: string,
     options: BuildOptions,
-    files: Map<string, SiteFile>,
+    files: Map<string, SiteFile>
 ): string {
     const assets = [...files.values()]
         .filter((file) => !file.path.endsWith("/index.html"))
@@ -198,7 +198,6 @@ function contentFingerprint(
     ];
     return bytesToHex(blake3(utf8ToBytes(parts.join("\n\n"))));
 }
-
 
 // ------------------------------------------------------------------ preview
 
@@ -237,8 +236,6 @@ function dropFootnotes(root: HTMLElement): void {
     root.querySelectorAll(".footnotes-ref").forEach((node) => node.remove());
 }
 
-
-
 interface RefSeed {
     /** Block the reference points at; its document is what gets included. */
     blockId: string;
@@ -251,7 +248,11 @@ interface RefSeed {
  * links or embed blocks — as sections of the same page. Only one level is
  * followed: references inside an included document stay plain text.
  */
-async function appendReferencedDocs(root: HTMLElement, docId: string, warnings: string[]): Promise<void> {
+async function appendReferencedDocs(
+    root: HTMLElement,
+    docId: string,
+    warnings: string[]
+): Promise<void> {
     const seeds = collectRefSeeds(root);
     const roots = await resolveRootIds([...new Set(seeds.map((seed) => seed.blockId))], warnings);
     const wanted: string[] = [];
@@ -292,7 +293,6 @@ async function appendReferencedDocs(root: HTMLElement, docId: string, warnings: 
     }
 }
 
-
 /** One pass over the tree, so the sections keep the order of the references. */
 function collectRefSeeds(root: HTMLElement): RefSeed[] {
     const seeds: RefSeed[] = [];
@@ -321,18 +321,25 @@ function collectRefSeeds(root: HTMLElement): RefSeed[] {
         if (type === "NodeBlockQueryEmbed") {
             // The embedded blocks are already rendered inside; their ids say
             // which documents the content came from.
-            element.querySelectorAll<HTMLElement>("[data-id], [data-node-id]").forEach((embedded) => {
-                push(embedded.getAttribute("data-id") ?? embedded.getAttribute("data-node-id"), null);
-            });
+            element
+                .querySelectorAll<HTMLElement>("[data-id], [data-node-id]")
+                .forEach((embedded) => {
+                    push(
+                        embedded.getAttribute("data-id") ?? embedded.getAttribute("data-node-id"),
+                        null
+                    );
+                });
         }
-
     });
 
     return seeds;
 }
 
 /** Maps every block id to the document it lives in. */
-async function resolveRootIds(blockIds: string[], warnings: string[]): Promise<Map<string, string>> {
+async function resolveRootIds(
+    blockIds: string[],
+    warnings: string[]
+): Promise<Map<string, string>> {
     const roots = new Map<string, string>();
     if (blockIds.length === 0) {
         return roots;
@@ -341,7 +348,9 @@ async function resolveRootIds(blockIds: string[], warnings: string[]): Promise<M
     // Every id was matched against `BLOCK_ID` before it got here, so the
     // literals cannot carry quotes.
     const list = blockIds.map((id) => `'${id}'`).join(",");
-    const response = await sql(`SELECT id, root_id FROM blocks WHERE id IN (${list}) LIMIT ${blockIds.length}`);
+    const response = await sql(
+        `SELECT id, root_id FROM blocks WHERE id IN (${list}) LIMIT ${blockIds.length}`
+    );
     if (!response.ok || !Array.isArray(response.data)) {
         warnings.push(`引用文档查询失败: ${response.raw.msg || "query/sql failed"}`);
         return roots;
@@ -361,7 +370,9 @@ async function queryReferencedDocs(docId: string, warnings: string[]): Promise<s
         return [];
     }
 
-    const response = await sql(`SELECT DISTINCT def_block_root_id FROM refs WHERE root_id = '${docId}'`);
+    const response = await sql(
+        `SELECT DISTINCT def_block_root_id FROM refs WHERE root_id = '${docId}'`
+    );
     if (!response.ok || !Array.isArray(response.data)) {
         warnings.push(`引用关系查询失败: ${response.raw.msg || "query/sql failed"}`);
         return [];
@@ -390,7 +401,6 @@ function buildDocSection(docId: string, doc: PreviewHTMLResponse): HTMLElement {
     section.append(heading, ...[...body.childNodes]);
     return section;
 }
-
 
 /** Turns the stashed references into links to the section that was appended. */
 function linkIncludedDocs(root: HTMLElement): void {
@@ -448,9 +458,11 @@ function buildToc(root: HTMLElement, options: BuildOptions): string {
     };
 
     const headings = [...root.querySelectorAll<HTMLElement>("[data-type='NodeHeading']")];
-    headings.filter((heading) => !heading.closest(REFERENCED_PARTS)).forEach((heading) => {
-        add(heading, headingLevel(heading));
-    });
+    headings
+        .filter((heading) => !heading.closest(REFERENCED_PARTS))
+        .forEach((heading) => {
+            add(heading, headingLevel(heading));
+        });
 
     if (options.tocIncludeRefs) {
         referenced = true;
@@ -459,13 +471,13 @@ function buildToc(root: HTMLElement, options: BuildOptions): string {
             if (title) {
                 add(title, 1);
             }
-            section.querySelectorAll<HTMLElement>("[data-type='NodeHeading']").forEach((heading) => {
-                add(heading, Math.min(6, headingLevel(heading) + 1));
-            });
+            section
+                .querySelectorAll<HTMLElement>("[data-type='NodeHeading']")
+                .forEach((heading) => {
+                    add(heading, Math.min(6, headingLevel(heading) + 1));
+                });
         });
     }
-
-
 
     if (entries.length === 0) {
         return "";
@@ -474,7 +486,8 @@ function buildToc(root: HTMLElement, options: BuildOptions): string {
     const split = entries[0].referenced ? -1 : entries.findIndex((entry) => entry.referenced);
     const items = entries
         .map((entry, index) => {
-            const separator = index === split ? `            <div class="sp-toc__split"></div>\n` : "";
+            const separator =
+                index === split ? `            <div class="sp-toc__split"></div>\n` : "";
             return `${separator}            <a class="sp-toc__item sp-toc__item--l${entry.level}" href="#${escapeAttr(entry.id)}">${escapeHtml(entry.text)}</a>`;
         })
         .join("\n");
@@ -522,7 +535,7 @@ const PAGE_ICONS = [
 async function addIcons(
     options: BuildOptions,
     files: Map<string, SiteFile>,
-    warnings: string[],
+    warnings: string[]
 ): Promise<string> {
     const links: string[] = [];
     for (const icon of PAGE_ICONS) {
@@ -556,7 +569,7 @@ function renderPage(
     toc: string,
     icons: string,
     stylesheets: string[],
-    options: BuildOptions,
+    options: BuildOptions
 ): string {
     const appearance = siyuanAppearance();
     const links = stylesheets
@@ -566,9 +579,10 @@ function renderPage(
 
     const heading = options.addTitle ? `<h1 class="sp-title">${escapeHtml(title)}</h1>` : "";
     const width = cssWidth(options.contentWidth);
-    const style = PAGE_STYLE
-        .replace(/__SHELL_WIDTH__/g, toc ? `calc(${width} + 17.5rem)` : width)
-        .replace(/__WIDTH__/g, width);
+    const style = PAGE_STYLE.replace(
+        /__SHELL_WIDTH__/g,
+        toc ? `calc(${width} + 17.5rem)` : width
+    ).replace(/__WIDTH__/g, width);
 
     return `<!DOCTYPE html>
 <html lang="${escapeAttr(siyuanLang())}" data-theme-mode="light" data-light-theme="${escapeAttr(appearance.light)}" data-dark-theme="${escapeAttr(appearance.dark)}">
@@ -599,7 +613,6 @@ function cssWidth(value: string): string {
     const width = value.trim();
     return /^\d+(\.\d+)?(px|rem|em|%|vw|ch)$/.test(width) ? width : "800px";
 }
-
 
 // ------------------------------------------------------------------ cleanup
 
@@ -678,7 +691,6 @@ function stripSpriteIcons(root: HTMLElement): void {
     root.querySelectorAll(".protyle-icon, .protyle-action__copy").forEach((node) => node.remove());
 }
 
-
 // --------------------------------------------------------------------- math
 
 /**
@@ -730,8 +742,9 @@ async function renderMath(root: HTMLElement, warnings: string[]): Promise<void> 
 
 /** The container a block formula renders into, created when the export omits it. */
 function mathFrame(node: HTMLElement): Element {
-    const existing = node.querySelector("[spin]")
-        ?? [...node.children].find((child) => !child.classList.contains("protyle-attr"));
+    const existing =
+        node.querySelector("[spin]") ??
+        [...node.children].find((child) => !child.classList.contains("protyle-attr"));
     if (existing) {
         return existing;
     }
@@ -751,7 +764,6 @@ function unescapeHtml(value: string): string {
     return area.value;
 }
 
-
 // --------------------------------------------------------------------- code
 
 async function highlightCode(root: HTMLElement, warnings: string[]): Promise<void> {
@@ -760,7 +772,10 @@ async function highlightCode(root: HTMLElement, warnings: string[]): Promise<voi
         return;
     }
 
-    const hljs = await loadGlobalScript<any>("hljs", "/stage/protyle/js/highlight.js/highlight.min.js");
+    const hljs = await loadGlobalScript<any>(
+        "hljs",
+        "/stage/protyle/js/highlight.js/highlight.min.js"
+    );
     if (!hljs) {
         warnings.push("未能加载 highlight.js，代码块将不带高亮");
         return;
@@ -809,10 +824,9 @@ const ASSET_ATTRIBUTES = ["src", "href", "poster", "data-src", "xlink:href"];
  * so they keep resolving from `/<slug>/index.html`.
  */
 async function collectReferencedAssets(
-
     root: HTMLElement,
     files: Map<string, SiteFile>,
-    warnings: string[],
+    warnings: string[]
 ): Promise<void> {
     const wanted = new Set<string>();
 
@@ -844,7 +858,6 @@ async function collectReferencedAssets(
         }
     });
 
-
     for (const sitePath of wanted) {
         await addWorkspaceFile(sitePath, files, warnings);
     }
@@ -870,7 +883,10 @@ function toWorkspacePath(raw: string): string | null {
  * Pulls SiYuan's own stylesheets into the site, keeping their server paths so
  * that relative `url()` references inside them keep resolving.
  */
-async function collectStylesheets(files: Map<string, SiteFile>, warnings: string[]): Promise<string[]> {
+async function collectStylesheets(
+    files: Map<string, SiteFile>,
+    warnings: string[]
+): Promise<string[]> {
     const appearance = siyuanAppearance();
     const candidates = [
         "/stage/build/export/base.css",
@@ -895,7 +911,7 @@ async function addCssSubResources(
     cssPath: string,
     css: string,
     files: Map<string, SiteFile>,
-    warnings: string[],
+    warnings: string[]
 ): Promise<void> {
     const baseDir = cssPath.slice(0, cssPath.lastIndexOf("/") + 1);
     for (const url of extractCssUrls(css)) {
@@ -943,7 +959,7 @@ function resolvePath(baseDir: string, raw: string): string | null {
 async function addWorkspaceFile(
     sitePath: string,
     files: Map<string, SiteFile>,
-    warnings: string[],
+    warnings: string[]
 ): Promise<SiteFile | null> {
     const existing = files.get(sitePath);
     if (existing) {

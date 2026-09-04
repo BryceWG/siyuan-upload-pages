@@ -18,8 +18,6 @@ import { proxyRequest } from "./proxy";
 import { SiteFile, bytesToBase64, extensionOf } from "./site";
 import type { DeployResult, Progress, SiteManifest } from "./provider";
 
-
-
 const API_BASE = "https://api.cloudflare.com/client/v4";
 /** The upload JWT lives for 300s; refresh well before that. */
 const TOKEN_TTL_MS = 200_000;
@@ -40,7 +38,6 @@ export interface ProjectInfo {
     productionBranch: string;
 }
 
-
 interface CloudflareEnvelope<T> {
     success: boolean;
     result: T;
@@ -56,7 +53,10 @@ interface UploadItem {
 }
 
 export const assetKey = (file: SiteFile): string =>
-    bytesToHex(blake3(utf8ToBytes(bytesToBase64(file.bytes) + extensionOf(file.path)))).slice(0, 32);
+    bytesToHex(blake3(utf8ToBytes(bytesToBase64(file.bytes) + extensionOf(file.path)))).slice(
+        0,
+        32
+    );
 
 /** Account id is optional in the settings, so every entry point resolves it first. */
 type Resolved = CloudflarePagesConfig & { accountId: string };
@@ -141,7 +141,7 @@ export async function deploy(
     files: SiteFile[],
     base: SiteManifest,
     config: CloudflarePagesConfig,
-    onProgress: Progress = () => { },
+    onProgress: Progress = () => {}
 ): Promise<DeployResult> {
     const resolved = await resolve(config);
 
@@ -162,7 +162,6 @@ export async function deploy(
         byKey.set(key, file);
     }
 
-
     let token = await mintUploadToken(resolved);
     let tokenAt = Date.now();
     const refresh = async () => {
@@ -172,7 +171,6 @@ export async function deploy(
         }
         return token;
     };
-
 
     onProgress("检查已存在的文件…");
     const allKeys = [...byKey.keys()];
@@ -238,7 +236,6 @@ export async function deploy(
     return { id: deployment.id, url: deployment.url, manifest };
 }
 
-
 /**
  * Removes a deployment created earlier by `deploy`. Deleting a production
  * deployment falls back to the previous production deployment; deleting a
@@ -246,7 +243,7 @@ export async function deploy(
  */
 export async function deleteDeployment(
     config: CloudflarePagesConfig,
-    deploymentId: string,
+    deploymentId: string
 ): Promise<void> {
     const resolved = await resolve(config);
     await cloudflare<unknown>({
@@ -277,7 +274,10 @@ function* createBatches(keys: string[], byKey: Map<string, SiteFile>): Generator
     for (const key of keys) {
         const file = byKey.get(key)!;
         const value = bytesToBase64(file.bytes);
-        if (batch.length > 0 && (size + value.length > MAX_BATCH_BYTES || batch.length >= MAX_BATCH_FILES)) {
+        if (
+            batch.length > 0 &&
+            (size + value.length > MAX_BATCH_BYTES || batch.length >= MAX_BATCH_FILES)
+        ) {
             yield batch;
             batch = [];
             size = 0;
@@ -295,11 +295,16 @@ function* createBatches(keys: string[], byKey: Map<string, SiteFile>): Generator
  * Cloudflare rejects the deployment call unless the multipart body is byte
  * exact, so it is assembled by hand and forwarded verbatim as base64.
  */
-function buildMultipart(fields: { name: string; value: string }[]): { bytes: Uint8Array; contentType: string } {
+function buildMultipart(fields: { name: string; value: string }[]): {
+    bytes: Uint8Array;
+    contentType: string;
+} {
     const boundary = `----siyuanpages${crypto.randomUUID().replace(/-/g, "")}`;
     const body = fields
-        .map(({ name, value }) =>
-            `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`)
+        .map(
+            ({ name, value }) =>
+                `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`
+        )
         .join("");
 
     return {
@@ -319,7 +324,9 @@ interface CloudflareRequest {
     allowMissing?: boolean;
 }
 
-async function cloudflare<T>(options: CloudflareRequest & { allowMissing: true }): Promise<T | null>;
+async function cloudflare<T>(
+    options: CloudflareRequest & { allowMissing: true }
+): Promise<T | null>;
 async function cloudflare<T>(options: CloudflareRequest): Promise<T>;
 async function cloudflare<T>(options: CloudflareRequest): Promise<T | null> {
     const response = await proxyRequest({
@@ -351,4 +358,3 @@ async function cloudflare<T>(options: CloudflareRequest): Promise<T | null> {
 
     return envelope.result;
 }
-

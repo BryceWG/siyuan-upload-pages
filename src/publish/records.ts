@@ -37,9 +37,10 @@ export interface UpsertResult {
 }
 
 const isRecord = (value: unknown): value is PublishRecord =>
-    typeof value === "object" && value !== null
-    && typeof (value as PublishRecord).docId === "string"
-    && typeof (value as PublishRecord).url === "string";
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as PublishRecord).docId === "string" &&
+    typeof (value as PublishRecord).url === "string";
 
 interface RecordFile {
     records: PublishRecord[];
@@ -107,7 +108,9 @@ export class RecordStore {
     }
 
     find(provider: ProviderId, docId: string): PublishRecord | undefined {
-        return this.records.find((record) => record.provider === provider && record.docId === docId);
+        return this.records.find(
+            (record) => record.provider === provider && record.docId === docId
+        );
     }
 
     forProvider(provider: ProviderId): PublishRecord[] {
@@ -155,7 +158,7 @@ export class RecordStore {
         const current = this.store.get();
         await this.store.write({
             records: current.records.filter(
-                (record) => !(record.provider === provider && record.docId === docId),
+                (record) => !(record.provider === provider && record.docId === docId)
             ),
             manifests: current.manifests,
         });

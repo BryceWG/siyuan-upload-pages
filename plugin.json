@@ -5,33 +5,10 @@
   "version": "0.1.0",
   "minAppVersion": "3.8.0",
 
-  "kernels": [
-    "windows",
-    "linux",
-    "darwin",
-    "ios",
-    "android",
-    "harmony",
-    "docker",
-    "all"
-  ],
+  "kernels": ["windows", "linux", "darwin", "ios", "android", "harmony", "docker", "all"],
   "disabledInPublish": true,
-  "backends": [
-    "windows",
-    "linux",
-    "darwin",
-    "ios",
-    "android",
-    "harmony",
-    "docker"
-  ],
-  "frontends": [
-    "desktop",
-    "mobile",
-    "browser-desktop",
-    "browser-mobile",
-    "desktop-window"
-  ],
+  "backends": ["windows", "linux", "darwin", "ios", "android", "harmony", "docker"],
+  "frontends": ["desktop", "mobile", "browser-desktop", "browser-mobile", "desktop-window"],
   "displayName": {
     "default": "PaperKite",
     "zh-CN": "纸鸢"
@@ -41,22 +18,11 @@
     "zh-CN": "把文档放飞成一张独立的静态网页"
   },
 
-
   "readme": {
     "default": "README.md",
     "zh-CN": "README.zh-CN.md"
   },
   "icon": "icon.png",
   "preview": "preview.png",
-  "keywords": [
-    "publish",
-    "share",
-    "static page",
-    "cloudflare",
-    "vercel",
-    "pages",
-    "发布",
-    "分享"
-  ]
-
+  "keywords": ["publish", "share", "static page", "cloudflare", "vercel", "pages", "发布", "分享"]
 }

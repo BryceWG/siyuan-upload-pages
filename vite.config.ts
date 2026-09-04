@@ -35,11 +35,10 @@ console.log("isSrcmap=>", isSrcmap);
 console.log("outputDir=>", outputDir);
 
 export default defineConfig({
-
     resolve: {
         alias: {
             "@": resolve(import.meta.dirname, "src"),
-        }
+        },
     },
 
     plugins: [
@@ -47,7 +46,7 @@ export default defineConfig({
 
         vitePluginYamlI18n({
             inDir: "public/i18n",
-            outDir: `${outputDir}/i18n`
+            outDir: `${outputDir}/i18n`,
         }),
 
         viteStaticCopy({
@@ -63,7 +62,7 @@ export default defineConfig({
 
     define: {
         "process.env.DEV_MODE": JSON.stringify(isDev),
-        "process.env.NODE_ENV": JSON.stringify(env.NODE_ENV)
+        "process.env.NODE_ENV": JSON.stringify(env.NODE_ENV),
     },
 
     build: {
@@ -79,27 +78,28 @@ export default defineConfig({
             formats: ["cjs"],
         },
         rollupOptions: {
-            plugins: isDev ? [
-                liveReloadServer(),
-                siYuanPluginReload(),
-                watchExternalFiles([
-                    "public/i18n/**",
-                    "./README*.md",
-                    "./docs/*.md",
-                    "./plugin.json"
-                ])
-            ] : [
-                cleanupDistFiles({
-                    patterns: ["i18n/*.yaml", "i18n/*.md"],
-                    distDir: outputDir
-                }),
-                zipPack({
-                    inDir: "./dist",
-                    outDir: "./",
-                    outFileName: "package.zip"
-                })
-            ],
-
+            plugins: isDev
+                ? [
+                      liveReloadServer(),
+                      siYuanPluginReload(),
+                      watchExternalFiles([
+                          "public/i18n/**",
+                          "./README*.md",
+                          "./docs/*.md",
+                          "./plugin.json",
+                      ]),
+                  ]
+                : [
+                      cleanupDistFiles({
+                          patterns: ["i18n/*.yaml", "i18n/*.md"],
+                          distDir: outputDir,
+                      }),
+                      zipPack({
+                          inDir: "./dist",
+                          outDir: "./",
+                          outFileName: "package.zip",
+                      }),
+                  ],
 
             external: ["siyuan", "process"],
 
@@ -108,7 +108,7 @@ export default defineConfig({
                 assetFileNames: (assetInfo) => assetInfo.name ?? "asset",
             },
         },
-    }
+    },
 });
 
 function liveReloadServer(): Plugin {
@@ -123,7 +123,7 @@ function liveReloadServer(): Plugin {
 
             server = createLiveReloadServer({
                 port: liveReloadPort,
-                delay: liveReloadDebounceMs
+                delay: liveReloadDebounceMs,
             });
             server.on("error", (error) => {
                 console.error(`[live-reload] unable to listen on port ${liveReloadPort}:`, error);
@@ -134,21 +134,22 @@ function liveReloadServer(): Plugin {
         closeWatcher() {
             server?.close();
             server = undefined;
-        }
+        },
     };
 }
 
 function siYuanPluginReload(): Plugin {
     return {
         name: "siyuan-plugin-reload",
-        banner: () => createSiYuanLiveReloadScript({
-            port: liveReloadPort,
-            pluginName: pluginManifest.name,
-            frontend: liveReloadFrontend,
-            message: liveReloadMessage,
-            debounceMs: liveReloadDebounceMs,
-            reloadGapMs: pluginReloadGapMs
-        })
+        banner: () =>
+            createSiYuanLiveReloadScript({
+                port: liveReloadPort,
+                pluginName: pluginManifest.name,
+                frontend: liveReloadFrontend,
+                message: liveReloadMessage,
+                debounceMs: liveReloadDebounceMs,
+                reloadGapMs: pluginReloadGapMs,
+            }),
     };
 }
 
@@ -160,7 +161,7 @@ function watchExternalFiles(patterns: string[]): Plugin {
             for (const file of files) {
                 this.addWatchFile(file);
             }
-        }
+        },
     };
 }
 
@@ -170,31 +171,28 @@ function watchExternalFiles(patterns: string[]): Plugin {
  * @param options:
  * @returns
  */
-function cleanupDistFiles(options: { patterns: string[], distDir: string }): Plugin {
-    const {
-        patterns,
-        distDir
-    } = options;
+function cleanupDistFiles(options: { patterns: string[]; distDir: string }): Plugin {
+    const { patterns, distDir } = options;
 
     return {
         name: "rollup-plugin-cleanup",
         enforce: "post",
         writeBundle: {
             sequential: true,
-            order: "post" as "post",
+            order: "post" as const,
             async handler() {
                 const fg = await import("fast-glob");
                 const fs = await import("fs");
                 // const path = await import('path');
 
                 // 使用 glob 语法，确保能匹配到文件
-                const distPatterns = patterns.map(pat => `${distDir}/${pat}`);
+                const distPatterns = patterns.map((pat) => `${distDir}/${pat}`);
                 console.debug("Cleanup searching patterns:", distPatterns);
 
                 const files = await fg.default(distPatterns, {
                     dot: true,
                     absolute: true,
-                    onlyFiles: false
+                    onlyFiles: false,
                 });
 
                 // console.info('Files to be cleaned up:', files);
@@ -214,7 +212,7 @@ function cleanupDistFiles(options: { patterns: string[], distDir: string }): Plu
                         console.error(`Failed to clean up ${file}:`, error);
                     }
                 }
-            }
-        }
+            },
+        },
     };
 }

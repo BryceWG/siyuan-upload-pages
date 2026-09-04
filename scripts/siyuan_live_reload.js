@@ -7,7 +7,14 @@ import { resolve } from "node:path";
  * single-plugin reload API, which works inside the current workspace.
  * @param {{ port: number, pluginName: string, frontend: string, message: string, debounceMs: number, reloadGapMs: number }} options
  */
-export function createSiYuanLiveReloadScript({ port, pluginName, frontend, message, debounceMs, reloadGapMs }) {
+export function createSiYuanLiveReloadScript({
+    port,
+    pluginName,
+    frontend,
+    message,
+    debounceMs,
+    reloadGapMs,
+}) {
     const values = JSON.stringify({ frontend, message, pluginName, port, debounceMs, reloadGapMs });
 
     return `(function () {
