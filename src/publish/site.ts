@@ -16,23 +16,15 @@ export interface BuiltSite {
     fingerprint: string;
 }
 
+const SLUG_LENGTH = 10;
+
 /**
- * URL-safe path segment for a document title. A non-ASCII title would have to
- * be percent-encoded in every manifest key and link, so it falls back to the
- * caller's id-based value instead.
+ * Random path segment for a published page. Titles made poor slugs: a non-ASCII
+ * title degraded to a document id, and stray latin letters inside a CJK title
+ * produced meaningless fragments. The link no longer carries the title at all.
  */
-export function toSlug(title: string, fallback: string): string {
-    const slug = title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .slice(0, 48)
-        .replace(/^-+|-+$/g, "");
-    // A mostly non-ASCII title leaves only stray letters behind, which would
-    // make a meaningless slug like `fel` for "调试 Fel 笔记".
-    return slug.length >= 3 ? slug : fallback;
-}
-
-
+export const randomSlug = (): string =>
+    crypto.randomUUID().replace(/-/g, "").slice(0, SLUG_LENGTH);
 
 export const totalSize = (files: SiteFile[]): number =>
     files.reduce((sum, file) => sum + file.bytes.length, 0);

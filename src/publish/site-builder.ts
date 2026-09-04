@@ -26,18 +26,13 @@ interface PreviewHTMLResponse {
 }
 
 export interface BuildOptions {
-    /**
-     * Resolves the path segment the page is served under. It takes the title
-     * because that is only known once the export has been fetched.
-     */
-    slug: (title: string) => string;
+    /** Path segment the page is served under, e.g. `a1b2c3d4e5` in `/a1b2c3d4e5/`. */
+    slug: string;
     /** Prepend the document title as an `<h1>`. */
     addTitle: boolean;
     /** Max content width of the article, e.g. `800px`. */
     contentWidth: string;
 }
-
-
 
 const PAGE_STYLE = `
 html, body { margin: 0; padding: 0; }
@@ -74,8 +69,9 @@ export async function buildSinglePageSite(docId: string, options: BuildOptions):
 
     const stylesheets = await collectStylesheets(files, warnings);
     const title = response.data.name || "Untitled";
-    const slug = options.slug(title);
+    const slug = options.slug;
     const canonical = canonicalHtml(holder);
+
     const html = renderPage(title, holder.innerHTML, stylesheets, options);
 
     const page = `/${slug}/index.html`;
@@ -93,7 +89,6 @@ export async function buildSinglePageSite(docId: string, options: BuildOptions):
         fingerprint: contentFingerprint(canonical, title, options, files),
     };
 }
-
 
 // -------------------------------------------------------------- fingerprint
 

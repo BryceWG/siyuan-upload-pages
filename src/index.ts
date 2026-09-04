@@ -8,8 +8,7 @@ import { buildSinglePageSite } from "./publish/site-builder";
 import { ProviderConfig, ProviderId, PublishTarget, SiteManifest, createTarget } from "./publish/provider";
 import { PublishRecord, RecordStore } from "./publish/records";
 
-import { formatSize, toSlug, totalSize } from "./publish/site";
-
+import { formatSize, randomSlug, totalSize } from "./publish/site";
 
 const STORAGE_NAME = "publish-config";
 const RECORDS_NAME = "publish-records";
@@ -18,8 +17,6 @@ const CLOUDFLARE_KEYS = ["accountId", "projectName", "apiToken", "branch"];
 const VERCEL_KEYS = ["vercelToken", "vercelProject", "vercelTeamId", "vercelTarget"];
 
 export default class PublishPlugin extends Plugin {
-
-
     private settingUtils: SettingUtils;
     private records = new RecordStore(this, RECORDS_NAME);
     private publishing = false;
@@ -334,7 +331,7 @@ export default class PublishPlugin extends Plugin {
             showMessage(this.i18n.buildingSite, 4000);
 
             const site = await buildSinglePageSite(docId, {
-                slug: (title) => this.slugFor(provider, docId, title),
+                slug: this.slugFor(provider, docId),
                 addTitle: this.settingUtils.get("addTitle") !== false,
                 contentWidth: String(this.settingUtils.get("contentWidth") || "800px"),
             });
@@ -394,19 +391,19 @@ export default class PublishPlugin extends Plugin {
      * A document keeps the slug it was first published under, so its link stays
      * valid even when the title changes later.
      */
-    private slugFor(provider: ProviderId, docId: string, title: string): string {
+    private slugFor(provider: ProviderId, docId: string): string {
         const existing = this.records.find(provider, docId);
         if (existing?.slug) {
             return existing.slug;
         }
 
-        const id = docId.replace(/[^a-z0-9]/gi, "").toLowerCase();
-        const candidate = toSlug(title, `doc-${id.slice(-8)}`);
         const taken = new Set(this.records.forProvider(provider).map((record) => record.slug));
-        return taken.has(candidate) ? `${candidate}-${id.slice(-4)}` : candidate;
+        let slug = randomSlug();
+        while (taken.has(slug)) {
+            slug = randomSlug();
+        }
+        return slug;
     }
-
-
 
     // --------------------------------------------------------------- records
 
