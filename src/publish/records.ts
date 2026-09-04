@@ -6,6 +6,7 @@
  */
 
 import { ProviderId, SiteManifest } from "./provider";
+import { DataStorage, JsonStore, LoadStatus, isPlainRecord } from "./storage";
 
 export interface PublishRecord {
     /** Root block id of the published document. */
@@ -27,11 +28,7 @@ export interface PublishRecord {
     updatedAt: number;
 }
 
-/** Only the two data methods the store needs, so it does not depend on the Plugin type. */
-export interface RecordStorage {
-    loadData(storageName: string): Promise<any>;
-    saveData(storageName: string, content: any): Promise<any>;
-}
+export type RecordStorage = DataStorage;
 
 export interface UpsertResult {
     record: PublishRecord;
@@ -44,44 +41,64 @@ const isRecord = (value: unknown): value is PublishRecord =>
     && typeof (value as PublishRecord).docId === "string"
     && typeof (value as PublishRecord).url === "string";
 
+interface RecordFile {
+    records: PublishRecord[];
+    manifests: Partial<Record<ProviderId, SiteManifest>>;
+}
+
+/**
+ * Accepts every layout the file ever had — a bare array in the oldest version,
+ * `{ records, manifests }` since — and returns null for anything else, which
+ * marks the file unreadable instead of letting it be replaced by an empty one.
+ */
+function parseRecordFile(payload: unknown): RecordFile | null {
+    if (Array.isArray(payload)) {
+        return { records: payload.filter(isRecord), manifests: {} };
+    }
+    if (!isPlainRecord(payload)) {
+        return null;
+    }
+    if (payload.records !== undefined && !Array.isArray(payload.records)) {
+        return null;
+    }
+    const manifests = payload.manifests;
+    return {
+        records: Array.isArray(payload.records) ? payload.records.filter(isRecord) : [],
+        manifests: isPlainRecord(manifests) ? (manifests as RecordFile["manifests"]) : {},
+    };
+}
+
 export class RecordStore {
-    private storage: RecordStorage;
-    private file: string;
-    private records: PublishRecord[] = [];
-    private manifests: Partial<Record<ProviderId, SiteManifest>> = {};
-    private reading?: Promise<void>;
-    private loaded = false;
+    private store: JsonStore<RecordFile>;
 
     constructor(storage: RecordStorage, name = "publish-records") {
-        this.storage = storage;
-        this.file = name.endsWith(".json") ? name : `${name}.json`;
+        this.store = new JsonStore({
+            storage,
+            name,
+            parse: parseRecordFile,
+            fallback: () => ({ records: [], manifests: {} }),
+        });
     }
 
     /**
-     * Reads the file once, and rejects when it cannot be read. Nothing may be
-     * written before this resolved: `loadData` rejects on a plugin instance
-     * whose lifecycle has ended (which happens on every dev live reload), and
-     * persisting the resulting empty state would wipe the whole history.
+     * Reads the file once. Nothing may be written before this resolved, and
+     * nothing at all when it reports `unreadable`: persisting the empty state
+     * that a failed read produces would wipe the whole history.
      */
-    ready(): Promise<void> {
-        if (!this.reading) {
-            this.reading = this.read().catch((error) => {
-                // Allow a later attempt to retry instead of failing forever.
-                this.reading = undefined;
-                throw error;
-            });
-        }
-        return this.reading;
+    ready(): Promise<LoadStatus> {
+        return this.store.ready();
     }
 
-    private async read(): Promise<void> {
-        const data = await this.storage.loadData(this.file);
-        const list = Array.isArray(data) ? data : data?.records;
-        this.records = Array.isArray(list) ? list.filter(isRecord) : [];
-        this.manifests = (!Array.isArray(data) && typeof data?.manifests === "object" && data.manifests)
-            ? data.manifests
-            : {};
-        this.loaded = true;
+    get storageName(): string {
+        return this.store.name;
+    }
+
+    get backupName(): string {
+        return this.store.backupName;
+    }
+
+    private get records(): PublishRecord[] {
+        return this.store.get().records;
     }
 
     /** All records, most recently updated first. */
@@ -99,13 +116,16 @@ export class RecordStore {
 
     /** What the last deployment to this channel served. */
     manifest(provider: ProviderId): SiteManifest {
-        return this.manifests[provider] ?? {};
+        return this.store.get().manifests[provider] ?? {};
     }
 
     async setManifest(provider: ProviderId, manifest: SiteManifest): Promise<void> {
         await this.ready();
-        this.manifests[provider] = manifest;
-        await this.persist();
+        const current = this.store.get();
+        await this.store.write({
+            records: current.records,
+            manifests: { ...current.manifests, [provider]: manifest },
+        });
     }
 
     /**
@@ -115,34 +135,29 @@ export class RecordStore {
     async upsert(record: Omit<PublishRecord, "publishedAt" | "updatedAt">): Promise<UpsertResult> {
         await this.ready();
         const now = Date.now();
+        const current = this.store.get();
         const existing = this.find(record.provider, record.docId);
-        if (existing) {
-            Object.assign(existing, record, { updatedAt: now });
-            await this.persist();
-            return { record: existing, created: false };
-        }
 
-        const created: PublishRecord = { ...record, publishedAt: now, updatedAt: now };
-        this.records.push(created);
-        await this.persist();
-        return { record: created, created: true };
+        const next: PublishRecord = existing
+            ? { ...existing, ...record, updatedAt: now }
+            : { ...record, publishedAt: now, updatedAt: now };
+
+        const records = existing
+            ? current.records.map((item) => (item === existing ? next : item))
+            : [...current.records, next];
+
+        await this.store.write({ records, manifests: current.manifests });
+        return { record: next, created: !existing };
     }
 
     async remove(provider: ProviderId, docId: string): Promise<void> {
         await this.ready();
-        this.records = this.records.filter(
-            (record) => !(record.provider === provider && record.docId === docId),
-        );
-        await this.persist();
-    }
-
-    private async persist(): Promise<void> {
-        if (!this.loaded) {
-            throw new Error("publish records were not loaded, refusing to overwrite the file");
-        }
-        await this.storage.saveData(this.file, {
-            records: this.records,
-            manifests: this.manifests,
+        const current = this.store.get();
+        await this.store.write({
+            records: current.records.filter(
+                (record) => !(record.provider === provider && record.docId === docId),
+            ),
+            manifests: current.manifests,
         });
     }
 }

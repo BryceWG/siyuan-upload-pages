@@ -9,7 +9,7 @@
     "publishOk": "Published, URL copied to clipboard",
     "publishFailed": "Publish failed",
     "dataNotLoaded": "The plugin data could not be read (the plugin may have just been reloaded). The action was cancelled so that the stored settings and publish records are not overwritten. Restart SiYuan or re-enable the plugin and try again",
-
+    "settingsSaveFailed": "The settings could not be saved; the file on disk was left untouched",
     "connectionFailed": "Connection failed",
     "projectReady": "Project ready",
     "projectCreated": "Project created",

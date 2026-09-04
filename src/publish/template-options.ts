@@ -5,6 +5,8 @@
  * the next dialog.
  */
 
+import { DataStorage, JsonStore, LoadStatus, isPlainRecord } from "./storage";
+
 export interface TemplateOptions {
     /** Prepend the document title as an `<h1>`. */
     addTitle: boolean;
@@ -27,54 +29,46 @@ export const DEFAULT_TEMPLATE_OPTIONS: TemplateOptions = {
 };
 
 /** Only the two data methods the store needs, so it does not depend on the Plugin type. */
-export interface OptionStorage {
-    loadData(storageName: string): Promise<any>;
-    saveData(storageName: string, content: any): Promise<any>;
-}
+export type OptionStorage = DataStorage;
 
 export class TemplateOptionStore {
-    private storage: OptionStorage;
-    private file: string;
-    private options: TemplateOptions = { ...DEFAULT_TEMPLATE_OPTIONS };
-    private reading?: Promise<void>;
-
+    private store: JsonStore<TemplateOptions>;
 
     constructor(storage: OptionStorage, name = "publish-template") {
-        this.storage = storage;
-        this.file = name.endsWith(".json") ? name : `${name}.json`;
+        this.store = new JsonStore({
+            storage,
+            name,
+            parse: (payload) => (isPlainRecord(payload) ? normalize(payload) : null),
+            fallback: () => ({ ...DEFAULT_TEMPLATE_OPTIONS }),
+        });
     }
 
     /**
-     * Reads the file once, and rejects when it cannot be read — saving before
-     * that would persist the defaults over the stored choices. `loadData`
-     * rejects on a plugin instance whose lifecycle has ended, which is what
-     * every dev live reload produces.
+     * Reads the file once. Saving before that, or after a read that failed,
+     * would persist the defaults over the stored choices.
      */
-    ready(): Promise<void> {
-        if (!this.reading) {
-            this.reading = this.read().catch((error) => {
-                this.reading = undefined;
-                throw error;
-            });
-        }
-        return this.reading;
+    ready(): Promise<LoadStatus> {
+        return this.store.ready();
     }
 
-    private async read(): Promise<void> {
-        this.options = normalize(await this.storage.loadData(this.file));
+    get storageName(): string {
+        return this.store.name;
     }
 
+    get backupName(): string {
+        return this.store.backupName;
+    }
 
     get(): TemplateOptions {
-        return { ...this.options };
+        return { ...this.store.get() };
     }
 
     async save(options: TemplateOptions): Promise<void> {
         await this.ready();
-        this.options = normalize(options);
-        await this.storage.saveData(this.file, this.options);
+        await this.store.write(normalize(options));
     }
 }
+
 
 
 /** The file is user-editable and may predate an option, so every field is checked. */

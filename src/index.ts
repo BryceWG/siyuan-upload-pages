@@ -9,6 +9,8 @@ import { buildSinglePageSite } from "./publish/site-builder";
 import { ProviderConfig, ProviderId, PublishTarget, SiteManifest, createTarget } from "./publish/provider";
 import { PublishRecord, RecordStore } from "./publish/records";
 import { TemplateOptionStore } from "./publish/template-options";
+import { LoadStatus } from "./publish/storage";
+
 
 import { formatSize, randomSlug, totalSize } from "./publish/site";
 
@@ -23,9 +25,10 @@ export default class PublishPlugin extends Plugin {
     private settingUtils: SettingUtils;
     private records = new RecordStore(this, RECORDS_NAME);
     private templateOptions = new TemplateOptionStore(this, TEMPLATE_NAME);
-    /** Resolves to false when the stored settings could not be read. */
-    private settingsReady: Promise<boolean>;
+    /** Resolves to the load status of the settings file; see `dataReady`. */
+    private settingsReady: Promise<LoadStatus>;
     private publishing = false;
+
 
     private isMobile: boolean;
 
@@ -53,19 +56,25 @@ export default class PublishPlugin extends Plugin {
 
         this.initSettings();
 
-        // Started here, awaited at every entry point: a write that runs before
-        // the stored data was read would persist an empty state over it.
-        this.settingsReady = this.settingUtils.load().then(() => true, (error) => {
-            console.error("[publish-pages] failed to load settings", error);
-            return false;
-        });
-        this.records.ready().catch((error) => {
-            console.error("[publish-pages] failed to load publish records", error);
-        });
-        this.templateOptions.ready().catch((error) => {
-            console.error("[publish-pages] failed to load template options", error);
-        });
+        // Started here, awaited at every entry point. `loadData` reports a
+        // failed read by resolving with something unusable rather than by
+        // rejecting, so the status of each file is what decides whether writing
+        // is allowed — a write before or after a failed read would persist an
+        // empty state over data that is still on disk.
+        this.settingsReady = this.settingUtils.load();
+        this.settingsReady.then((status) => this.reportLoad(STORAGE_NAME, status));
+        this.records.ready().then((status) => this.reportLoad(RECORDS_NAME, status));
+        this.templateOptions.ready().then((status) => this.reportLoad(TEMPLATE_NAME, status));
     }
+
+    /** A file that could not be read is worth surfacing, not just logging. */
+    private reportLoad(name: string, status: LoadStatus) {
+        if (status === "unreadable") {
+            console.error(`[publish-pages] ${name}.json could not be read; it will not be overwritten`);
+            showMessage(`${this.i18n.dataNotLoaded}: ${name}.json`, 0, "error");
+        }
+    }
+
 
     onLayoutReady() {
         this.addTopBar({
@@ -104,7 +113,12 @@ export default class PublishPlugin extends Plugin {
     // ------------------------------------------------------------- settings
 
     private initSettings() {
-        this.settingUtils = new SettingUtils({ plugin: this, name: STORAGE_NAME });
+        this.settingUtils = new SettingUtils({
+            plugin: this,
+            name: STORAGE_NAME,
+            onSaveError: () => showMessage(`${this.i18n.settingsSaveFailed}: ${STORAGE_NAME}.json`, 0, "error"),
+        });
+
 
         this.settingUtils.addItem({
             key: "provider",
@@ -140,9 +154,11 @@ export default class PublishPlugin extends Plugin {
             key: "apiToken",
             value: "",
             type: "textinput",
+            password: true,
             title: this.i18n.settingApiToken,
             description: this.i18n.settingApiTokenDesc,
         });
+
         this.settingUtils.addItem({
             key: "branch",
             value: "main",
@@ -155,9 +171,11 @@ export default class PublishPlugin extends Plugin {
             key: "vercelToken",
             value: "",
             type: "textinput",
+            password: true,
             title: this.i18n.settingVercelToken,
             description: this.i18n.settingVercelTokenDesc,
         });
+
         this.settingUtils.addItem({
             key: "vercelProject",
             value: "",
@@ -251,9 +269,9 @@ export default class PublishPlugin extends Plugin {
      * credentials with the defaults.
      */
     openSetting(): void {
-        this.settingsReady.then((loaded) => {
-            if (!loaded) {
-                showMessage(this.i18n.dataNotLoaded, 0, "error");
+        this.settingsReady.then((status) => {
+            if (status === "unreadable") {
+                showMessage(`${this.i18n.dataNotLoaded}: ${STORAGE_NAME}.json`, 0, "error");
                 return;
             }
             super.openSetting();
@@ -263,21 +281,22 @@ export default class PublishPlugin extends Plugin {
 
     /** Awaits every stored file; false means "do not write anything". */
     private async dataReady(): Promise<boolean> {
-        const [settings] = await Promise.all([
+        const statuses = await Promise.all([
             this.settingsReady,
             this.records.ready(),
             this.templateOptions.ready(),
-        ]).catch((error) => {
-            console.error("[publish-pages] plugin data unavailable", error);
-            return [false];
-        });
+        ]);
 
-        if (!settings) {
-            showMessage(this.i18n.dataNotLoaded, 0, "error");
+        const broken = [STORAGE_NAME, RECORDS_NAME, TEMPLATE_NAME]
+            .filter((_, index) => statuses[index] === "unreadable");
+
+        if (broken.length > 0) {
+            showMessage(`${this.i18n.dataNotLoaded}: ${broken.map((name) => `${name}.json`).join(", ")}`, 0, "error");
             return false;
         }
         return true;
     }
+
 
 
     /**
@@ -577,11 +596,22 @@ export default class PublishPlugin extends Plugin {
         });
     }
 
-    uninstall() {
-        this.removeData(`${STORAGE_NAME}.json`);
-        this.removeData(`${RECORDS_NAME}.json`);
-        this.removeData(`${TEMPLATE_NAME}.json`);
+    async uninstall() {
+        // The mirrors go with the files they back up, otherwise a reinstall
+        // would recover the state the user just asked to be removed.
+        const files = [
+            this.settingUtils.file,
+            this.records.storageName,
+            this.records.backupName,
+            this.templateOptions.storageName,
+            this.templateOptions.backupName,
+            `${STORAGE_NAME}.bak.json`,
+        ];
+        await Promise.all(files.map((file) => this.removeData(file).catch((error) => {
+            console.warn(`[publish-pages] ${file} could not be removed`, error);
+        })));
     }
+
 
 }
 

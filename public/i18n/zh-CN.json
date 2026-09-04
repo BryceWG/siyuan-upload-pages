@@ -9,7 +9,7 @@
     "publishOk": "发布成功，链接已复制",
     "publishFailed": "发布失败",
     "dataNotLoaded": "插件数据未读取成功（可能刚刚重载过插件），为避免覆盖已有配置和发布记录，本次操作已取消。请重启思源或重新启用插件后再试",
-
+    "settingsSaveFailed": "配置保存失败，磁盘上的配置未被改动",
     "connectionFailed": "连接失败",
     "projectReady": "项目可用",
     "projectCreated": "已创建项目",
