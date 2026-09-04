@@ -1,6 +1,3 @@
-import { blake3 } from "@noble/hashes/blake3";
-import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils";
-
 export interface SiteFile {
     /** Site path, always starting with `/`, e.g. `/index.html`. */
     path: string;
@@ -10,26 +7,35 @@ export interface SiteFile {
 
 export interface BuiltSite {
     title: string;
+    /** Path segment the page is served under, e.g. `my-note` in `/my-note/`. */
+    slug: string;
     files: SiteFile[];
     /** Paths that were referenced but could not be read from the workspace. */
     warnings: string[];
+    /** Stable digest of the built content; equal fingerprints mean an equal page. */
+    fingerprint: string;
 }
+
+/**
+ * URL-safe path segment for a document title. A non-ASCII title would have to
+ * be percent-encoded in every manifest key and link, so it falls back to the
+ * caller's id-based value instead.
+ */
+export function toSlug(title: string, fallback: string): string {
+    const slug = title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .slice(0, 48)
+        .replace(/^-+|-+$/g, "");
+    // A mostly non-ASCII title leaves only stray letters behind, which would
+    // make a meaningless slug like `fel` for "调试 Fel 笔记".
+    return slug.length >= 3 ? slug : fallback;
+}
+
+
 
 export const totalSize = (files: SiteFile[]): number =>
     files.reduce((sum, file) => sum + file.bytes.length, 0);
-
-/**
- * Digest of everything the site consists of: two builds with the same
- * fingerprint would upload byte-identical files, so an equal fingerprint means
- * the published page does not need a new deployment. Hashing is two level
- * (per file, then over `path:hash` lines) to stay cheap on large assets.
- */
-export function siteFingerprint(files: SiteFile[]): string {
-    const lines = [...files]
-        .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
-        .map((file) => `${file.path}:${bytesToHex(blake3(file.bytes))}`);
-    return bytesToHex(blake3(utf8ToBytes(lines.join("\n"))));
-}
 
 export const formatSize = (bytes: number): string => {
     if (bytes < 1024) {

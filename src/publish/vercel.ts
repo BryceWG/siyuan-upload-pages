@@ -1,15 +1,16 @@
 /**
  * Vercel non-Git deployment.
  *
- * Small sites go up in one call, with every file inlined into the deployment
- * request as base64. Above `INLINE_LIMIT_BYTES` the files are uploaded first
- * (`POST /v2/files`, keyed by the sha1 of the content) and the deployment then
- * references them by sha. Vercel has no archive upload, so those are the only
- * two options.
+ * Files are uploaded first (`POST /v2/files`, keyed by the sha1 of the content)
+ * and the deployment then references them by sha. Inlining the bytes into the
+ * deployment body is also possible, but then they never enter Vercel's file
+ * store and a later deployment cannot reference them — which is exactly what
+ * carrying previously published pages forward relies on.
  *
  * `projectSettings.framework = null` keeps Vercel from running a build step —
  * the uploaded files are served as-is.
  */
+
 
 
 import { sha1 } from "@noble/hashes/sha1";
@@ -18,19 +19,18 @@ import { bytesToHex } from "@noble/hashes/utils";
 import PromiseLimitPool from "@/libs/promise-pool";
 import { proxyRequest } from "./proxy";
 import { SiteFile, bytesToBase64 } from "./site";
-import type { DeployResult, Progress } from "./provider";
+import type { DeployResult, Progress, SiteManifest } from "./provider";
+
 
 const API_BASE = "https://api.vercel.com";
 /** Vercel has no batch upload endpoint, so files go up concurrently instead. */
 const UPLOAD_CONCURRENCY = 6;
 /** Reporting every single file would spam the message area. */
 const PROGRESS_EVERY = 5;
-/**
- * Small sites are inlined into the deployment request, which makes the whole
- * upload a single call. The body limit of that endpoint is not documented, so
- * this stays conservative and larger sites fall back to per-file upload.
- */
-const INLINE_LIMIT_BYTES = 4 * 1024 * 1024;
+/** The kernel proxy occasionally drops a connection mid-upload. */
+const UPLOAD_RETRIES = 2;
+
+
 
 
 
@@ -47,11 +47,16 @@ export interface ProjectInfo {
     name: string;
 }
 
-interface FileEntry {
-    file: string;
+interface FileRef {
     sha: string;
     size: number;
 }
+
+const isFileRef = (value: unknown): value is FileRef =>
+    typeof value === "object" && value !== null
+    && typeof (value as FileRef).sha === "string"
+    && typeof (value as FileRef).size === "number";
+
 
 export function validateConfig(config: VercelConfig): string | null {
     if (!config.token) {
@@ -91,33 +96,37 @@ export async function deleteDeployment(config: VercelConfig, deploymentId: strin
 
 export async function deploy(
     files: SiteFile[],
+    base: SiteManifest,
     config: VercelConfig,
     onProgress: Progress = () => { },
 ): Promise<DeployResult> {
-    // Vercel expects deployment-root-relative paths without a leading slash.
-    const paths = files.map((file) => file.path.replace(/^\//, ""));
-    const base64 = files.map((file) => bytesToBase64(file.bytes));
-    const inlineSize = base64.reduce((sum, value) => sum + value.length, 0);
-
-    if (inlineSize <= INLINE_LIMIT_BYTES) {
-        onProgress(`上传中（单请求 ${files.length} 个文件）`);
-        return createDeployment(config, paths.map((path, index) => ({
-            file: path,
-            data: base64[index],
-            encoding: "base64",
-        })));
+    // The deployment body lists every file the site serves, so pages from
+    // earlier publishes are carried over by sha. Their bytes already sit in
+    // Vercel's file store, which is why they need no re-upload.
+    const manifest: Record<string, FileRef> = {};
+    for (const [path, ref] of Object.entries(base)) {
+        if (isFileRef(ref)) {
+            manifest[path] = ref;
+        }
     }
 
-    const entries: FileEntry[] = files.map((file, index) => ({
-        file: paths[index],
-        sha: bytesToHex(sha1(file.bytes)),
-        size: file.bytes.length,
-    }));
+    // Anything the previous deployment already referenced is in Vercel's file
+    // store, so only genuinely new content has to be uploaded. Without this the
+    // shared stylesheets and KaTeX fonts would be re-sent on every publish.
+    const known = new Set(Object.values(manifest).map((ref) => ref.sha));
 
     // Identical content only has to be uploaded once, even if it is referenced
     // under several paths.
     const payloads = new Map<string, Uint8Array>();
-    files.forEach((file, index) => payloads.set(entries[index].sha, file.bytes));
+    for (const file of files) {
+        const sha = bytesToHex(sha1(file.bytes));
+        manifest[file.path] = { sha, size: file.bytes.length };
+        if (!known.has(sha)) {
+            payloads.set(sha, file.bytes);
+        }
+    }
+
+
 
     const total = payloads.size;
     let uploaded = 0;
@@ -134,10 +143,21 @@ export async function deploy(
     await pool.awaitAll();
 
     onProgress("创建部署…");
-    return createDeployment(config, entries);
+    // Manifest keys are site paths; Vercel wants them without a leading slash.
+    const entries = Object.entries(manifest).map(([path, ref]) => ({
+        file: path.replace(/^\//, ""),
+        ...ref,
+    }));
+    const deployment = await createDeployment(config, entries);
+    return { ...deployment, manifest };
+
 }
 
-async function createDeployment(config: VercelConfig, files: unknown[]): Promise<DeployResult> {
+async function createDeployment(
+    config: VercelConfig,
+    files: unknown[],
+): Promise<{ id: string; url: string }> {
+
     const deployment = await vercelJson<{ id: string; url: string }>(config, {
         path: "/v13/deployments",
         method: "POST",
@@ -180,6 +200,27 @@ async function findProjectDomain(config: VercelConfig): Promise<string | null> {
 
 
 async function uploadFile(config: VercelConfig, sha: string, bytes: Uint8Array): Promise<void> {
+    for (let attempt = 0; ; attempt += 1) {
+        try {
+            await postFile(config, sha, bytes);
+            return;
+        } catch (error) {
+            // A connection dropped on the way through the kernel proxy is worth
+            // retrying; a rejection from Vercel itself is not.
+            if (attempt >= UPLOAD_RETRIES || !isTransient(error)) {
+                throw error;
+            }
+        }
+    }
+}
+
+const isTransient = (error: unknown): boolean =>
+    /unexpected EOF|connection reset|timeout|forward request failed/i.test(
+        error instanceof Error ? error.message : String(error),
+    );
+
+async function postFile(config: VercelConfig, sha: string, bytes: Uint8Array): Promise<void> {
+
     const response = await proxyRequest({
         url: `${API_BASE}/v2/files${teamQuery(config, "?")}`,
         method: "POST",

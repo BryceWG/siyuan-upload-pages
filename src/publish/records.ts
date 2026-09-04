@@ -5,7 +5,7 @@
  * and the "republish or skip?" decision in the publish flow rely on.
  */
 
-import { ProviderId } from "./provider";
+import { ProviderId, SiteManifest } from "./provider";
 
 export interface PublishRecord {
     /** Root block id of the published document. */
@@ -13,6 +13,8 @@ export interface PublishRecord {
     /** Document title at publish time. */
     docName: string;
     provider: ProviderId;
+    /** Path segment the page is served under, e.g. `my-note` in `/my-note/`. */
+    slug: string;
     /** Remote deployment id, used when deleting the publish. */
     deploymentId: string;
     /** Public URL of the deployment. */
@@ -46,6 +48,7 @@ export class RecordStore {
     private storage: RecordStorage;
     private file: string;
     private records: PublishRecord[] = [];
+    private manifests: Partial<Record<ProviderId, SiteManifest>> = {};
 
     constructor(storage: RecordStorage, name = "publish-records") {
         this.storage = storage;
@@ -56,6 +59,9 @@ export class RecordStore {
         const data = await this.storage.loadData(this.file).catch(() => null);
         const list = Array.isArray(data) ? data : data?.records;
         this.records = Array.isArray(list) ? list.filter(isRecord) : [];
+        this.manifests = (!Array.isArray(data) && typeof data?.manifests === "object" && data.manifests)
+            ? data.manifests
+            : {};
     }
 
     /** All records, most recently updated first. */
@@ -65,6 +71,20 @@ export class RecordStore {
 
     find(provider: ProviderId, docId: string): PublishRecord | undefined {
         return this.records.find((record) => record.provider === provider && record.docId === docId);
+    }
+
+    forProvider(provider: ProviderId): PublishRecord[] {
+        return this.records.filter((record) => record.provider === provider);
+    }
+
+    /** What the last deployment to this channel served. */
+    manifest(provider: ProviderId): SiteManifest {
+        return this.manifests[provider] ?? {};
+    }
+
+    async setManifest(provider: ProviderId, manifest: SiteManifest): Promise<void> {
+        this.manifests[provider] = manifest;
+        await this.persist();
     }
 
     /**
@@ -94,6 +114,9 @@ export class RecordStore {
     }
 
     private async persist(): Promise<void> {
-        await this.storage.saveData(this.file, this.records);
+        await this.storage.saveData(this.file, {
+            records: this.records,
+            manifests: this.manifests,
+        });
     }
 }

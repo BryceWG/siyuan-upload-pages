@@ -16,7 +16,8 @@ import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils";
 
 import { proxyRequest } from "./proxy";
 import { SiteFile, bytesToBase64, extensionOf } from "./site";
-import type { DeployResult, Progress } from "./provider";
+import type { DeployResult, Progress, SiteManifest } from "./provider";
+
 
 
 const API_BASE = "https://api.cloudflare.com/client/v4";
@@ -138,18 +139,29 @@ async function resolve(config: CloudflarePagesConfig): Promise<Resolved> {
 
 export async function deploy(
     files: SiteFile[],
+    base: SiteManifest,
     config: CloudflarePagesConfig,
     onProgress: Progress = () => { },
 ): Promise<DeployResult> {
     const resolved = await resolve(config);
 
+    // Pages takes the complete path → hash map on every deploy, so pages from
+    // earlier publishes are carried over by hash. Their bytes already sit in
+    // the Pages asset store, which is why they need no re-upload.
     const manifest: Record<string, string> = {};
+    for (const [path, key] of Object.entries(base)) {
+        if (typeof key === "string") {
+            manifest[path] = key;
+        }
+    }
+
     const byKey = new Map<string, SiteFile>();
     for (const file of files) {
         const key = assetKey(file);
         manifest[file.path] = key;
         byKey.set(key, file);
     }
+
 
     let token = await mintUploadToken(resolved);
     let tokenAt = Date.now();
@@ -212,8 +224,20 @@ export async function deploy(
         payloadEncoding: "base64",
     });
 
-    return { id: deployment.id, url: deployment.url };
+    // Every deployment gets its own `<id>.<project>.pages.dev` URL, but a
+    // production deployment also updates the project domain, which always
+    // serves the latest production deploy. Prefer it so republishing keeps
+    // one stable link; preview deployments only have their unique URL.
+    const project = await findProject(resolved).catch(() => null);
+    if (project?.subdomain && (resolved.branch || "main") === project.productionBranch) {
+        const host = project.subdomain.endsWith(".pages.dev")
+            ? project.subdomain
+            : `${project.subdomain}.pages.dev`;
+        return { id: deployment.id, url: `https://${host}`, manifest };
+    }
+    return { id: deployment.id, url: deployment.url, manifest };
 }
+
 
 /**
  * Removes a deployment created earlier by `deploy`. Deleting a production

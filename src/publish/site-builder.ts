@@ -26,11 +26,18 @@ interface PreviewHTMLResponse {
 }
 
 export interface BuildOptions {
+    /**
+     * Resolves the path segment the page is served under. It takes the title
+     * because that is only known once the export has been fetched.
+     */
+    slug: (title: string) => string;
     /** Prepend the document title as an `<h1>`. */
     addTitle: boolean;
     /** Max content width of the article, e.g. `800px`. */
     contentWidth: string;
 }
+
+
 
 const PAGE_STYLE = `
 html, body { margin: 0; padding: 0; }
@@ -67,22 +74,26 @@ export async function buildSinglePageSite(docId: string, options: BuildOptions):
 
     const stylesheets = await collectStylesheets(files, warnings);
     const title = response.data.name || "Untitled";
+    const slug = options.slug(title);
     const canonical = canonicalHtml(holder);
     const html = renderPage(title, holder.innerHTML, stylesheets, options);
 
-    files.set("/index.html", {
-        path: "/index.html",
+    const page = `/${slug}/index.html`;
+    files.set(page, {
+        path: page,
         bytes: textToBytes(html),
         contentType: "text/html; charset=utf-8",
     });
 
     return {
         title,
+        slug,
         files: [...files.values()],
         warnings,
         fingerprint: contentFingerprint(canonical, title, options, files),
     };
 }
+
 
 // -------------------------------------------------------------- fingerprint
 
@@ -130,7 +141,8 @@ function contentFingerprint(
     files: Map<string, SiteFile>,
 ): string {
     const assets = [...files.values()]
-        .filter((file) => file.path !== "/index.html")
+        .filter((file) => !file.path.endsWith("/index.html"))
+
         .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
         .map((file) => `${file.path}:${bytesToHex(blake3(file.bytes))}`);
     const parts = [
@@ -148,8 +160,9 @@ function contentFingerprint(
 function renderPage(title: string, body: string, stylesheets: string[], options: BuildOptions): string {
     const appearance = siyuanAppearance();
     const links = stylesheets
-        .map((href) => `    <link rel="stylesheet" href="${escapeAttr(href.slice(1))}">`)
+        .map((href) => `    <link rel="stylesheet" href="${escapeAttr(href)}">`)
         .join("\n");
+
     const heading = options.addTitle ? `<h1 class="sp-title">${escapeHtml(title)}</h1>` : "";
 
     return `<!DOCTYPE html>
@@ -376,11 +389,12 @@ async function loadGlobalScript<T>(globalName: string, url: string): Promise<T |
 const ASSET_ATTRIBUTES = ["src", "href", "poster", "data-src", "xlink:href"];
 
 /**
- * Rewrites nothing: SiYuan already emits workspace-relative paths such as
- * `assets/foo.png`, which resolve correctly for a page served at `/`. We only
- * need to pull those files out of the workspace and into the site.
+ * Pulls every `assets/` and `emojis/` file the page references out of the
+ * workspace and into the site, rewriting the references to root-absolute paths
+ * so they keep resolving from `/<slug>/index.html`.
  */
 async function collectReferencedAssets(
+
     root: HTMLElement,
     files: Map<string, SiteFile>,
     warnings: string[],
@@ -393,15 +407,28 @@ async function collectReferencedAssets(
             const sitePath = value ? toWorkspacePath(value) : null;
             if (sitePath) {
                 wanted.add(sitePath);
+                // The page lives under `/<slug>/`, so SiYuan's workspace-relative
+                // `assets/foo.png` has to become root-absolute.
+                element.setAttribute(name, encodeURI(sitePath));
             }
         }
-        for (const url of extractCssUrls(element.getAttribute("style") ?? "")) {
-            const sitePath = toWorkspacePath(url);
-            if (sitePath) {
-                wanted.add(sitePath);
+
+        const style = element.getAttribute("style");
+        if (style) {
+            let rewritten = style;
+            for (const url of extractCssUrls(style)) {
+                const sitePath = toWorkspacePath(url);
+                if (sitePath) {
+                    wanted.add(sitePath);
+                    rewritten = rewritten.split(url).join(encodeURI(sitePath));
+                }
+            }
+            if (rewritten !== style) {
+                element.setAttribute("style", rewritten);
             }
         }
     });
+
 
     for (const sitePath of wanted) {
         await addWorkspaceFile(sitePath, files, warnings);

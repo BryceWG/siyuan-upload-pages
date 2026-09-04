@@ -5,10 +5,11 @@ import { confirmDialog } from "./libs/dialog";
 import { SettingUtils } from "./libs/setting-utils";
 import { openRecordsDialog } from "./records-dialog";
 import { buildSinglePageSite } from "./publish/site-builder";
-import { ProviderConfig, ProviderId, PublishTarget, createTarget } from "./publish/provider";
+import { ProviderConfig, ProviderId, PublishTarget, SiteManifest, createTarget } from "./publish/provider";
 import { PublishRecord, RecordStore } from "./publish/records";
 
-import { formatSize, siteFingerprint, totalSize } from "./publish/site";
+import { formatSize, toSlug, totalSize } from "./publish/site";
+
 
 const STORAGE_NAME = "publish-config";
 const RECORDS_NAME = "publish-records";
@@ -333,6 +334,7 @@ export default class PublishPlugin extends Plugin {
             showMessage(this.i18n.buildingSite, 4000);
 
             const site = await buildSinglePageSite(docId, {
+                slug: (title) => this.slugFor(provider, docId, title),
                 addTitle: this.settingUtils.get("addTitle") !== false,
                 contentWidth: String(this.settingUtils.get("contentWidth") || "800px"),
             });
@@ -342,11 +344,10 @@ export default class PublishPlugin extends Plugin {
                 showMessage(`${this.i18n.buildWarnings}: ${site.warnings.length}`, 6000);
             }
 
-            // The record check needs the built content: an equal fingerprint
-            // means the existing deployment already serves exactly this page.
-            const fingerprint = siteFingerprint(site.files);
+            // An equal fingerprint means the existing deployment already
+            // serves exactly this page.
             const record = this.records.find(provider, docId);
-            if (record && record.fingerprint === fingerprint) {
+            if (record && record.fingerprint === site.fingerprint) {
                 copyToClipboard(record.url);
                 showMessage(`${this.i18n.recordUnchanged}: ${record.url}`, 0);
                 return;
@@ -359,26 +360,53 @@ export default class PublishPlugin extends Plugin {
                 4000,
             );
 
-            const result = await target.deploy(site.files, (message) => showMessage(message, 3000));
+            // Everything the previous deployment served is carried over, so
+            // publishing one document never drops the other pages.
+            const result = await target.deploy(
+                site.files,
+                this.records.manifest(provider),
+                (message) => showMessage(message, 3000),
+            );
+            await this.records.setManifest(provider, result.manifest);
 
+            const url = `${result.url.replace(/\/+$/, "")}/${site.slug}/`;
             const { created } = await this.records.upsert({
                 docId,
                 docName: site.title,
                 provider,
+                slug: site.slug,
                 deploymentId: result.id,
-                url: result.url,
-                fingerprint,
+                url,
+                fingerprint: site.fingerprint,
             });
 
-            copyToClipboard(result.url);
+            copyToClipboard(url);
             const message = created ? this.i18n.publishOk : this.i18n.publishUpdatedOk;
-            showMessage(`${message}: ${result.url}`, 0);
+            showMessage(`${message}: ${url}`, 0);
         } catch (error) {
             showMessage(`${this.i18n.publishFailed}: ${errorMessage(error)}`, 0, "error");
         } finally {
             this.publishing = false;
         }
     }
+
+    /**
+     * A document keeps the slug it was first published under, so its link stays
+     * valid even when the title changes later.
+     */
+    private slugFor(provider: ProviderId, docId: string, title: string): string {
+        const existing = this.records.find(provider, docId);
+        if (existing?.slug) {
+            return existing.slug;
+        }
+
+        const id = docId.replace(/[^a-z0-9]/gi, "").toLowerCase();
+        const candidate = toSlug(title, `doc-${id.slice(-8)}`);
+        const taken = new Set(this.records.forProvider(provider).map((record) => record.slug));
+        return taken.has(candidate) ? `${candidate}-${id.slice(-4)}` : candidate;
+    }
+
+
 
     // --------------------------------------------------------------- records
 
@@ -427,7 +455,7 @@ export default class PublishPlugin extends Plugin {
             }
 
             try {
-                await target.deleteDeployment(record.deploymentId);
+                await this.removeFromSite(target, record);
             } catch (error) {
                 showMessage(`${this.i18n.recordsDeleteFailed}: ${errorMessage(error)}`, 0, "error");
                 return false;
@@ -438,6 +466,25 @@ export default class PublishPlugin extends Plugin {
         showMessage(this.i18n.recordsDeleteOk, 3000);
         return true;
     }
+
+    /**
+     * Drops the page from the site by redeploying the previous manifest without
+     * its paths. The deployment itself is shared by every published page, so it
+     * must not be deleted — that would take the whole site back one version.
+     */
+    private async removeFromSite(target: PublishTarget, record: PublishRecord): Promise<void> {
+        const prefix = `/${record.slug}/`;
+        const kept: SiteManifest = {};
+        for (const [path, ref] of Object.entries(this.records.manifest(record.provider))) {
+            if (!path.startsWith(prefix)) {
+                kept[path] = ref;
+            }
+        }
+
+        const result = await target.deploy([], kept, (message) => showMessage(message, 3000));
+        await this.records.setManifest(record.provider, result.manifest);
+    }
+
 
     /** confirmDialog with a DOM body, so record fields never pass through innerHTML. */
     private confirmDelete(question: string, record: PublishRecord): Promise<boolean> {

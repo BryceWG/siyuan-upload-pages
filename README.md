@@ -47,6 +47,8 @@ Upload uses the non-Git deployment flow: each file is sent to `POST /v2/files` (
 
 The deployment URL is copied to the clipboard when the publish succeeds.
 
+**Link stability**: a production deployment (Cloudflare production branch / Vercel `production` target) returns the project's fixed domain (Cloudflare: `<project>.pages.dev`; Vercel: the project's assigned `<name>.vercel.app` domain), so republishing updates the content under the same link. Preview deployments (non-production branch / `preview` target) get a new platform-generated URL every time.
+
 ### Publish records and republishing
 
 Every publish leaves a record in the plugin data (channel, document name and id, URL, publish time and update time). Publishing the same document again:
