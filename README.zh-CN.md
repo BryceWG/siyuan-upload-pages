@@ -1,3 +1,5 @@
+![纸鸢 PaperKite](./asset/banner.png)
+
 # 纸鸢 PaperKite
 
 把当前打开的思源文档放飞成一张独立的静态网页，托管到你已经创建好的项目（Cloudflare Pages 或 Vercel）上，线还牵在你手里。

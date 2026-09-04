@@ -1,3 +1,5 @@
+![PaperKite](./asset/banner.png)
+
 # PaperKite
 
 Let a document fly. PaperKite turns the currently open SiYuan document into a self-contained static page and hosts it on a project you already own (Cloudflare Pages or Vercel), then hands you the link.
