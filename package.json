@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "type": "module",
   "description": "PaperKite - publish a SiYuan document as a self-contained static page",
-  "repository": "",
-  "homepage": "",
-  "author": "frostime",
+  "repository": "https://github.com/BryceWG/siyuan-upload-pages",
+  "homepage": "https://github.com/BryceWG/siyuan-upload-pages",
+  "author": "Bryce",
   "license": "MIT",
   "packageManager": "pnpm@11.4.0",
   "engines": {
