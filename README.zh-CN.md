@@ -2,8 +2,7 @@
 
 # 纸鸢 PaperKite
 
-把当前打开的思源文档放飞成一张独立的静态网页，托管到你已经创建好的项目（Cloudflare Pages 或 Vercel）上，线还牵在你手里。
-
+把思源文档放飞成一张独立的静态网页，托管到你的 Cloudflare Pages 或 Vercel 项目上。
 
 [English](./README.md)
 
@@ -19,28 +18,24 @@
 
 内容生成和上传是分开的：`src/publish/site-builder.ts` 只产出 `SiteFile[]`，`src/publish/provider.ts` 负责分发给具体平台。新增一个平台不需要改内容部分。
 
-## 准备工作：Cloudflare Pages
+## 准备工作
 
-1. 创建一个 Pages 项目，类型必须是 **Direct Upload（上传资产）**。Git 集成类型的项目无法用本插件上传，且项目类型创建后不可更改。用 API 建最省事：
+只需要准备凭证。项目不用手动创建：在插件设置里填好凭证和项目名，点「检查项目」的「检查 / 创建」——项目不存在就按这个名字建，已存在则只读取信息。
 
-   ```powershell
-   $body = @{ name = "siyuan-notes"; production_branch = "main" } | ConvertTo-Json
-   Invoke-RestMethod -Method Post `
-     -Uri "https://api.cloudflare.com/client/v4/accounts/$account/pages/projects" `
-     -Headers @{ Authorization = "Bearer $token" } `
-     -ContentType "application/json" -Body $body
-   ```
+### Cloudflare Pages
 
-2. API Token 权限选 `Account` → `Cloudflare Pages` → `Edit`。
-3. 插件设置里「发布目标」选 Cloudflare Pages，填 Account ID、项目名、Token、分支。
+- **API Token**：权限选 `Account` → `Cloudflare Pages` → `Edit`
+- **Account ID**：留空会自动识别；Token 没有账户读取权限时手动填
+- **项目名**、**部署分支**（默认 `main`）
+- 插件建出来的是 **Direct Upload** 类型。想复用已有项目的话，它也必须是 Direct Upload——Git 集成的项目无法用本插件上传，且类型创建后不可更改
 
 上传走 Direct Upload：`upload-token` → `check-missing` → `upload` → `upsert-hashes` → `deployments`。资源键是 `blake3(base64(内容) + 扩展名)` 取前 32 位十六进制。
 
-## 准备工作：Vercel
+### Vercel
 
-1. 创建一个 Vercel 项目，**不要**连接 Git 仓库（连了也能用，但两个来源会互相覆盖）。
-2. 在账户设置 → Tokens 创建 Access Token，Scope 选项目所属的账户或团队。
-3. 插件设置里「发布目标」选 Vercel，填 Token、项目名；团队项目还要填 Team ID。
+- **Access Token**：在账户设置 → Tokens 创建，Scope 选项目所属的账户或团队
+- **项目名**、**部署环境**（production / preview）；团队项目还要填 **Team ID**
+- 插件建出来的项目不连 Git 仓库。复用已有项目时也不要连 Git，否则两个来源会互相覆盖
 
 上传走非 Git 部署流程：先逐个 `POST /v2/files`（`x-vercel-digest` 是文件内容的 sha1），再 `POST /v13/deployments` 用 sha 引用这些文件。`projectSettings.framework` 传 `null`，Vercel 不会跑构建，直接按原样托管。
 
@@ -49,7 +44,7 @@
 - 顶栏图标 → 「发布当前文档」
 - 或使用命令面板中的同名命令
 
-点击后会先弹出「导出设置」，确认本次页面的样子后才开始发布。发布成功后部署链接会自动复制到剪贴板。
+点击后会先弹出「导出设置」，确认设置后开始发布。发布成功后部署链接会自动复制到剪贴板。
 
 ### 导出设置
 
@@ -60,8 +55,6 @@
 - **包含正文中引用的其他文档**：思源导出时会把正文里的引用转成脚注，并把被引用内容放在页面末尾的脚注区；此外块引用、文档链接和嵌入块指向的文档会作为章节追加。只展开一层——被包含内容里的引用仍是纯文本。关闭本项会连脚注区和正文里的上标一起移除
 - **在右侧显示目录导航**：纯静态锚点目录，窄屏（≤1100px）时移到正文上方
 - **目录中包含被引用的文档**：需要同时开启上面两项，被包含内容的标题会在目录里以分割线单独成组
-
-
 
 **链接的稳定性**：生产部署（Cloudflare 生产分支 / Vercel 的 production 目标）返回项目固定域名（Cloudflare 为 `<项目名>.pages.dev`；Vercel 为项目分配的 `<名称>.vercel.app` 域名），重复发布只更新内容，链接保持不变。预览部署（非生产分支 / preview 目标）平台每次都会生成新的部署链接。
 
@@ -99,9 +92,6 @@ pnpm run format       # 按 Prettier 重写文件格式
 
 - 一次发布一篇文档，整站每篇文档一个 `index.html`；开启「包含正文中引用的其他文档」时，被引用的文档会并入同一张页面。
 - 未被包含的块引用无法在页面中跳转，会降级为纯文本。
-
 - Mermaid、ECharts、流程图等需要运行时渲染的图表暂不处理，会退化为源码文本。
 - Vercel 没有批量上传接口，是每个文件一个请求（并发 6），文件多时请求次数仍比 Cloudflare 的批量上传多。
-
 - Token 保存在本工作空间的插件数据文件（`data/storage/petal/siyuan-upload-pages/publish-config.json`）中，请勿分享该文件。
-
