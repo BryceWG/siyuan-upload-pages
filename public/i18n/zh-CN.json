@@ -8,6 +8,8 @@
     "uploading": "准备上传（文件数 / 体积）",
     "publishOk": "发布成功，链接已复制",
     "publishFailed": "发布失败",
+    "dataNotLoaded": "插件数据未读取成功（可能刚刚重载过插件），为避免覆盖已有配置和发布记录，本次操作已取消。请重启思源或重新启用插件后再试",
+
     "connectionFailed": "连接失败",
     "projectReady": "项目可用",
     "projectCreated": "已创建项目",
@@ -60,7 +62,8 @@
     "optionContentWidth": "正文最大宽度",
     "optionContentWidthDesc": "CSS 长度值，例如 800px",
     "optionIncludeRefs": "包含正文中引用的其他文档",
-    "optionIncludeRefsDesc": "块引用、文档链接和嵌入块指向的文档会作为章节追加到页面末尾，只展开一层",
+    "optionIncludeRefsDesc": "正文中被引用的内容（思源导出会转为页面末尾的脚注区），以及块引用、文档链接和嵌入块指向的文档，只展开一层；关闭则一并移除",
+
     "optionToc": "在右侧显示目录导航",
     "optionTocDesc": "纯静态锚点目录，窄屏时移到正文上方",
     "optionTocIncludeRefs": "目录中包含被引用的文档",

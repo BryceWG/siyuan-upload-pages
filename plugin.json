@@ -1,7 +1,7 @@
 {
   "name": "siyuan-upload-pages",
   "author": "Bryce",
-  "url": "",
+  "url": "https://github.com/BryceWG/siyuan-upload-pages",
   "version": "0.1.0",
   "minAppVersion": "3.8.0",
 
@@ -48,14 +48,6 @@
   },
   "icon": "icon.png",
   "preview": "preview.png",
-  "funding": {
-    "openCollective": "",
-    "patreon": "",
-    "github": "",
-    "custom": [
-      "https://ld246.com/sponsor"
-    ]
-  },
   "keywords": [
     "publish",
     "share",

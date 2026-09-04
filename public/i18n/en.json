@@ -8,6 +8,8 @@
     "uploading": "Ready to upload (files / size)",
     "publishOk": "Published, URL copied to clipboard",
     "publishFailed": "Publish failed",
+    "dataNotLoaded": "The plugin data could not be read (the plugin may have just been reloaded). The action was cancelled so that the stored settings and publish records are not overwritten. Restart SiYuan or re-enable the plugin and try again",
+
     "connectionFailed": "Connection failed",
     "projectReady": "Project ready",
     "projectCreated": "Project created",
@@ -60,7 +62,8 @@
     "optionContentWidth": "Maximum content width",
     "optionContentWidthDesc": "A CSS length, for example 800px",
     "optionIncludeRefs": "Include the documents referenced by the body",
-    "optionIncludeRefsDesc": "Documents behind block references, document links and embed blocks are appended as sections; only one level is followed",
+    "optionIncludeRefsDesc": "The referenced content (SiYuan's export turns it into the footnote section at the end of the page) plus the documents behind block references, document links and embed blocks; only one level is followed, and turning this off removes all of it",
+
     "optionToc": "Show a table of contents on the right",
     "optionTocDesc": "Static anchor links only; moves above the article on narrow screens",
     "optionTocIncludeRefs": "List the included referenced documents too",

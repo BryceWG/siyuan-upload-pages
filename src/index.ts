@@ -23,7 +23,10 @@ export default class PublishPlugin extends Plugin {
     private settingUtils: SettingUtils;
     private records = new RecordStore(this, RECORDS_NAME);
     private templateOptions = new TemplateOptionStore(this, TEMPLATE_NAME);
+    /** Resolves to false when the stored settings could not be read. */
+    private settingsReady: Promise<boolean>;
     private publishing = false;
+
     private isMobile: boolean;
 
 
@@ -49,21 +52,24 @@ export default class PublishPlugin extends Plugin {
         });
 
         this.initSettings();
+
+        // Started here, awaited at every entry point: a write that runs before
+        // the stored data was read would persist an empty state over it.
+        this.settingsReady = this.settingUtils.load().then(() => true, (error) => {
+            console.error("[publish-pages] failed to load settings", error);
+            return false;
+        });
+        this.records.ready().catch((error) => {
+            console.error("[publish-pages] failed to load publish records", error);
+        });
+        this.templateOptions.ready().catch((error) => {
+            console.error("[publish-pages] failed to load template options", error);
+        });
     }
 
     onLayoutReady() {
-        this.settingUtils.load().catch((error) => {
-            console.error("[publish-pages] failed to load settings", error);
-        });
-        this.records.load().catch((error) => {
-            console.error("[publish-pages] failed to load publish records", error);
-        });
-        this.templateOptions.load().catch((error) => {
-            console.error("[publish-pages] failed to load template options", error);
-        });
-
-
         this.addTopBar({
+
             icon: "iconPublishPages",
             title: this.i18n.publishCurrentDoc,
             position: "right",
@@ -239,10 +245,40 @@ export default class PublishPlugin extends Plugin {
         setVisible(VERCEL_KEYS, provider === "vercel");
     }
 
+    /**
+     * The settings dialog writes every item back on confirm, so it must not
+     * open while the stored values are unknown — that would replace the saved
+     * credentials with the defaults.
+     */
     openSetting(): void {
-        super.openSetting();
-        this.applyProviderVisibility();
+        this.settingsReady.then((loaded) => {
+            if (!loaded) {
+                showMessage(this.i18n.dataNotLoaded, 0, "error");
+                return;
+            }
+            super.openSetting();
+            this.applyProviderVisibility();
+        });
     }
+
+    /** Awaits every stored file; false means "do not write anything". */
+    private async dataReady(): Promise<boolean> {
+        const [settings] = await Promise.all([
+            this.settingsReady,
+            this.records.ready(),
+            this.templateOptions.ready(),
+        ]).catch((error) => {
+            console.error("[publish-pages] plugin data unavailable", error);
+            return [false];
+        });
+
+        if (!settings) {
+            showMessage(this.i18n.dataNotLoaded, 0, "error");
+            return false;
+        }
+        return true;
+    }
+
 
     /**
      * Reads the settings of `provider`, defaulting to the selected one — a
@@ -283,7 +319,12 @@ export default class PublishPlugin extends Plugin {
     }
 
     private async checkOrCreateProject() {
+        if (!await this.dataReady()) {
+            return;
+        }
+
         const target = createTarget(this.providerConfig());
+
         const invalid = target.validate();
         if (invalid) {
             showMessage(invalid, 6000, "error");
@@ -312,7 +353,12 @@ export default class PublishPlugin extends Plugin {
             return;
         }
 
+        if (!await this.dataReady()) {
+            return;
+        }
+
         const provider = this.selectedProvider();
+
         const target = createTarget(this.providerConfig());
         const invalid = target.validate();
         if (invalid) {
@@ -335,8 +381,8 @@ export default class PublishPlugin extends Plugin {
                 ...options,
                 slug: this.slugFor(provider, docId),
                 tocLabel: this.i18n.tocLabel,
+                iconDir: `/plugins/${this.name}/asset`,
             });
-
 
             if (site.warnings.length > 0) {
                 console.warn("[publish-pages] build warnings", site.warnings);
@@ -430,8 +476,13 @@ export default class PublishPlugin extends Plugin {
 
     // --------------------------------------------------------------- records
 
-    private showRecordsDialog(): void {
+    private async showRecordsDialog(): Promise<void> {
+        if (!await this.dataReady()) {
+            return;
+        }
+
         openRecordsDialog(
+
             {
                 title: this.i18n.recordsTitle,
                 empty: this.i18n.recordsEmpty,

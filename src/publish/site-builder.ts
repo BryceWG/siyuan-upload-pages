@@ -31,6 +31,8 @@ export interface BuildOptions extends TemplateOptions {
     slug: string;
     /** Heading of the table of contents, e.g. `目录`. */
     tocLabel: string;
+    /** Kernel folder holding the page icon files, e.g. `/plugins/<plugin>/asset`. */
+    iconDir: string;
 }
 
 const PAGE_STYLE = `
@@ -57,9 +59,17 @@ img { max-width: 100%; }
 .sp-toc__item--l4 { padding-left: 2.25rem; }
 .sp-toc__item--l5 { padding-left: 3rem; }
 .sp-toc__item--l6 { padding-left: 3.75rem; }
+.sp-toc__split { margin: .6rem 0; border-top: 1px solid var(--b3-border-color); }
 .sp-doc { margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--b3-border-color); }
 .sp-doc__title { font-size: 1.6em; line-height: 1.3; margin: 0 0 1rem; font-weight: 600; }
 .sp-ref { color: var(--b3-theme-primary); text-decoration: none; border-bottom: 1px solid currentColor; }
+/* The export stylesheet lays block math out as a flex row with a leading
+   spacer, which pushes the formula against the right edge. KaTeX's own
+   centering is restored here, tags included. */
+.protyle-wysiwyg .katex-display > .katex > .katex-html { display: block; position: relative; }
+.protyle-wysiwyg .katex-display > .katex > .katex-html::before { content: none; }
+.protyle-wysiwyg .katex-display > .katex > .katex-html > .tag { position: absolute; right: 0; margin: 0; }
+
 @media (max-width: 1100px) {
     .sp-shell { flex-direction: column; gap: 1.5rem; max-width: __WIDTH__; }
     .sp-page { order: 2; max-width: 100%; }
@@ -79,7 +89,10 @@ export async function buildSinglePageSite(docId: string, options: BuildOptions):
 
     if (options.includeRefs) {
         await appendReferencedDocs(holder, docId, warnings);
+    } else {
+        dropFootnotes(holder);
     }
+
 
     sanitize(holder);
     linkIncludedDocs(holder);
@@ -91,11 +104,12 @@ export async function buildSinglePageSite(docId: string, options: BuildOptions):
     const toc = options.toc ? buildToc(holder, options) : "";
 
     const stylesheets = await collectStylesheets(files, warnings);
+    const iconLinks = await addIcons(options, files, warnings);
     const title = main.name || "Untitled";
     const slug = options.slug;
     const canonical = canonicalHtml(holder);
 
-    const html = renderPage(title, holder.innerHTML, toc, stylesheets, options);
+    const html = renderPage(title, holder.innerHTML, toc, iconLinks, stylesheets, options);
 
     const page = `/${slug}/index.html`;
     files.set(page, {
@@ -109,9 +123,10 @@ export async function buildSinglePageSite(docId: string, options: BuildOptions):
         slug,
         files: [...files.values()],
         warnings,
-        fingerprint: contentFingerprint(canonical, title, options, files),
+        fingerprint: contentFingerprint(canonical, title, toc, options, files),
     };
 }
+
 
 // -------------------------------------------------------------- fingerprint
 
@@ -150,11 +165,14 @@ function canonicalHtml(root: HTMLElement): string {
 /**
  * Digest of everything the published page consists of: the canonical DOM in
  * place of `/index.html` (whose bytes carry the kernel's attribute shuffling),
- * the page shell inputs, and the exact bytes of every other site file.
+ * the page shell inputs — the stylesheet template included, so that a change to
+ * the template alone still triggers a redeploy — and the exact bytes of every
+ * other site file.
  */
 function contentFingerprint(
     canonical: string,
     title: string,
+    toc: string,
     options: BuildOptions,
     files: Map<string, SiteFile>,
 ): string {
@@ -167,15 +185,15 @@ function contentFingerprint(
         `title=${title}`,
         `addTitle=${options.addTitle}`,
         `width=${cssWidth(options.contentWidth)}`,
-        `toc=${options.toc}`,
-        `tocIncludeRefs=${options.tocIncludeRefs}`,
-        `tocLabel=${options.tocLabel}`,
         `includeRefs=${options.includeRefs}`,
+        `toc=${toc}`,
+        `style=${PAGE_STYLE}`,
         `dom=${canonical}`,
         `files=${assets.join("\n")}`,
     ];
     return bytesToHex(blake3(utf8ToBytes(parts.join("\n\n"))));
 }
+
 
 // ------------------------------------------------------------------ preview
 
@@ -195,6 +213,24 @@ async function fetchPreview(docId: string): Promise<PreviewHTMLResponse> {
 // ------------------------------------------------------ referenced documents
 
 const SIYUAN_BLOCK_HREF = "siyuan://blocks/";
+
+/** Where the kernel puts the content of the blocks the body references. */
+const FOOTNOTES = ".footnotes-defs-div";
+
+/** Everything that is not the body of the published document itself. */
+const REFERENCED_PARTS = `section.sp-doc, ${FOOTNOTES}`;
+
+/**
+ * `exportPreviewHTML` turns every reference in the body into a footnote and
+ * appends the referenced content at the end of the page, which is a second
+ * source of included documents next to `appendReferencedDocs`. Dropping both
+ * the definitions and the markers is what "do not include them" means for it.
+ */
+function dropFootnotes(root: HTMLElement): void {
+    root.querySelectorAll(FOOTNOTES).forEach((node) => node.remove());
+    root.querySelectorAll(".footnotes-ref").forEach((node) => node.remove());
+}
+
 
 interface RefSeed {
     /** Block the reference points at; its document is what gets included. */
@@ -350,16 +386,21 @@ interface TocEntry {
     level: number;
     id: string;
     text: string;
+    /** True for the entries of an included referenced document. */
+    referenced: boolean;
 }
 
 /**
  * A static table of contents: anchor ids are assigned by position so that two
  * exports of an unchanged document produce the same page, and every entry is a
- * plain `<a href="#...">` — no script on the published page.
+ * plain `<a href="#...">` — no script on the published page. The headings of
+ * the included documents (own sections plus the footnote definitions the kernel
+ * appends for every reference) sit behind a separator, mirroring the article.
  */
 function buildToc(root: HTMLElement, options: BuildOptions): string {
     const entries: TocEntry[] = [];
     let counter = 0;
+    let referenced = false;
     const anchorFor = (element: HTMLElement): string => {
         const id = `sp-h-${++counter}`;
         element.setAttribute("id", id);
@@ -368,16 +409,17 @@ function buildToc(root: HTMLElement, options: BuildOptions): string {
     const add = (element: HTMLElement, level: number): void => {
         const text = headingText(element);
         if (text) {
-            entries.push({ level, id: anchorFor(element), text });
+            entries.push({ level, id: anchorFor(element), text, referenced });
         }
     };
 
     const headings = [...root.querySelectorAll<HTMLElement>("[data-type='NodeHeading']")];
-    headings.filter((heading) => !heading.closest("section.sp-doc")).forEach((heading) => {
+    headings.filter((heading) => !heading.closest(REFERENCED_PARTS)).forEach((heading) => {
         add(heading, headingLevel(heading));
     });
 
     if (options.tocIncludeRefs) {
+        referenced = true;
         root.querySelectorAll<HTMLElement>("section.sp-doc").forEach((section) => {
             const title = section.querySelector<HTMLElement>(".sp-doc__title");
             if (title) {
@@ -387,14 +429,22 @@ function buildToc(root: HTMLElement, options: BuildOptions): string {
                 add(heading, Math.min(6, headingLevel(heading) + 1));
             });
         });
+        root.querySelectorAll<HTMLElement>(`${FOOTNOTES} [data-type='NodeHeading']`).forEach((heading) => {
+            add(heading, headingLevel(heading));
+        });
     }
+
 
     if (entries.length === 0) {
         return "";
     }
 
+    const split = entries[0].referenced ? -1 : entries.findIndex((entry) => entry.referenced);
     const items = entries
-        .map((entry) => `            <a class="sp-toc__item sp-toc__item--l${entry.level}" href="#${escapeAttr(entry.id)}">${escapeHtml(entry.text)}</a>`)
+        .map((entry, index) => {
+            const separator = index === split ? `            <div class="sp-toc__split"></div>\n` : "";
+            return `${separator}            <a class="sp-toc__item sp-toc__item--l${entry.level}" href="#${escapeAttr(entry.id)}">${escapeHtml(entry.text)}</a>`;
+        })
         .join("\n");
 
     return `        <aside class="sp-toc">
@@ -417,12 +467,62 @@ function headingText(heading: HTMLElement): string {
     return (clone.textContent ?? "").replace(/\s+/g, " ").trim();
 }
 
+// -------------------------------------------------------------------- icon
+
+/**
+ * The page icons, in the order browsers should prefer them: the SVG carries the
+ * mark at any size and follows the tab bar's colour scheme, the PNG covers
+ * clients without SVG favicon support, and the apple-touch icon is what iOS
+ * uses when a page is added to the home screen.
+ */
+const PAGE_ICONS = [
+    { file: "favicon.svg", rel: "icon", type: "image/svg+xml", sizes: "any" },
+    { file: "favicon-96.png", rel: "icon", type: "image/png", sizes: "96x96" },
+    { file: "apple-touch-icon.png", rel: "apple-touch-icon", type: "image/png", sizes: "" },
+];
+
+/**
+ * Copies the icon files into the site root, where every published page shares
+ * them. They are served from the plugin folder by the kernel, so the same
+ * same-origin read as the rest of the assets applies. Returns the `<link>` tags
+ * for the icons that could be read.
+ */
+async function addIcons(
+    options: BuildOptions,
+    files: Map<string, SiteFile>,
+    warnings: string[],
+): Promise<string> {
+    const links: string[] = [];
+    for (const icon of PAGE_ICONS) {
+        const source = `${options.iconDir}/${icon.file}`;
+        const path = `/${icon.file}`;
+        try {
+            const response = await fetch(encodeURI(source));
+            if (!response.ok) {
+                warnings.push(`读取图标失败 (HTTP ${response.status}): ${source}`);
+                continue;
+            }
+            files.set(path, {
+                path,
+                bytes: new Uint8Array(await response.arrayBuffer()),
+                contentType: response.headers.get("content-type") || guessContentType(path),
+            });
+            const sizes = icon.sizes ? ` sizes="${icon.sizes}"` : "";
+            links.push(`    <link rel="${icon.rel}" href="${path}" type="${icon.type}"${sizes}>`);
+        } catch (error) {
+            warnings.push(`读取图标失败: ${source} (${String(error)})`);
+        }
+    }
+    return links.join("\n");
+}
+
 // ---------------------------------------------------------------- page shell
 
 function renderPage(
     title: string,
     body: string,
     toc: string,
+    icons: string,
     stylesheets: string[],
     options: BuildOptions,
 ): string {
@@ -430,6 +530,7 @@ function renderPage(
     const links = stylesheets
         .map((href) => `    <link rel="stylesheet" href="${escapeAttr(href)}">`)
         .join("\n");
+    const icon = icons ? `\n${icons}` : "";
 
     const heading = options.addTitle ? `<h1 class="sp-title">${escapeHtml(title)}</h1>` : "";
     const width = cssWidth(options.contentWidth);
@@ -442,7 +543,7 @@ function renderPage(
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>${escapeHtml(title)}</title>
+    <title>${escapeHtml(title)}</title>${icon}
 ${links}
     <style>${style}</style>
 </head>

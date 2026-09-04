@@ -49,19 +49,39 @@ export class RecordStore {
     private file: string;
     private records: PublishRecord[] = [];
     private manifests: Partial<Record<ProviderId, SiteManifest>> = {};
+    private reading?: Promise<void>;
+    private loaded = false;
 
     constructor(storage: RecordStorage, name = "publish-records") {
         this.storage = storage;
         this.file = name.endsWith(".json") ? name : `${name}.json`;
     }
 
-    async load(): Promise<void> {
-        const data = await this.storage.loadData(this.file).catch(() => null);
+    /**
+     * Reads the file once, and rejects when it cannot be read. Nothing may be
+     * written before this resolved: `loadData` rejects on a plugin instance
+     * whose lifecycle has ended (which happens on every dev live reload), and
+     * persisting the resulting empty state would wipe the whole history.
+     */
+    ready(): Promise<void> {
+        if (!this.reading) {
+            this.reading = this.read().catch((error) => {
+                // Allow a later attempt to retry instead of failing forever.
+                this.reading = undefined;
+                throw error;
+            });
+        }
+        return this.reading;
+    }
+
+    private async read(): Promise<void> {
+        const data = await this.storage.loadData(this.file);
         const list = Array.isArray(data) ? data : data?.records;
         this.records = Array.isArray(list) ? list.filter(isRecord) : [];
         this.manifests = (!Array.isArray(data) && typeof data?.manifests === "object" && data.manifests)
             ? data.manifests
             : {};
+        this.loaded = true;
     }
 
     /** All records, most recently updated first. */
@@ -83,6 +103,7 @@ export class RecordStore {
     }
 
     async setManifest(provider: ProviderId, manifest: SiteManifest): Promise<void> {
+        await this.ready();
         this.manifests[provider] = manifest;
         await this.persist();
     }
@@ -92,6 +113,7 @@ export class RecordStore {
      * an update: `publishedAt` survives, `updatedAt` tracks the latest deploy.
      */
     async upsert(record: Omit<PublishRecord, "publishedAt" | "updatedAt">): Promise<UpsertResult> {
+        await this.ready();
         const now = Date.now();
         const existing = this.find(record.provider, record.docId);
         if (existing) {
@@ -107,6 +129,7 @@ export class RecordStore {
     }
 
     async remove(provider: ProviderId, docId: string): Promise<void> {
+        await this.ready();
         this.records = this.records.filter(
             (record) => !(record.provider === provider && record.docId === docId),
         );
@@ -114,6 +137,9 @@ export class RecordStore {
     }
 
     private async persist(): Promise<void> {
+        if (!this.loaded) {
+            throw new Error("publish records were not loaded, refusing to overwrite the file");
+        }
         await this.storage.saveData(this.file, {
             records: this.records,
             manifests: this.manifests,

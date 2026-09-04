@@ -53,9 +53,10 @@ Every option can be changed per publish, and the confirmed values become the def
 
 - **Show the document title on top of the page**
 - **Maximum content width**: a CSS length, for example `800px`
-- **Include the documents referenced by the body**: documents behind block references, document links and embed blocks are appended as sections of the page, and the references themselves become in-page anchors. Only one level is followed — references inside an included document stay plain text
+- **Include the documents referenced by the body**: SiYuan's export turns the references in the body into footnotes and appends the referenced content as a footnote section; on top of that, documents behind block references, document links and embed blocks are appended as sections. Only one level is followed — references inside included content stay plain text. Turning this off removes the footnote section and its markers as well
 - **Show a table of contents on the right**: static anchor links only; it moves above the article on narrow screens (≤1100px)
-- **List the included referenced documents too**: needs both options above; the included documents and their own headings join the table of contents
+- **List the included referenced documents too**: needs both options above; the headings of the included content form their own group behind a separator
+
 
 
 **Link stability**: a production deployment (Cloudflare production branch / Vercel `production` target) returns the project's fixed domain (Cloudflare: `<project>.pages.dev`; Vercel: the project's assigned `<name>.vercel.app` domain), so republishing updates the content under the same link. Preview deployments (non-production branch / `preview` target) get a new platform-generated URL every time.

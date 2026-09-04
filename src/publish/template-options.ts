@@ -36,26 +36,46 @@ export class TemplateOptionStore {
     private storage: OptionStorage;
     private file: string;
     private options: TemplateOptions = { ...DEFAULT_TEMPLATE_OPTIONS };
+    private reading?: Promise<void>;
+
 
     constructor(storage: OptionStorage, name = "publish-template") {
         this.storage = storage;
         this.file = name.endsWith(".json") ? name : `${name}.json`;
     }
 
-    async load(): Promise<void> {
-        const data = await this.storage.loadData(this.file).catch(() => null);
-        this.options = normalize(data);
+    /**
+     * Reads the file once, and rejects when it cannot be read — saving before
+     * that would persist the defaults over the stored choices. `loadData`
+     * rejects on a plugin instance whose lifecycle has ended, which is what
+     * every dev live reload produces.
+     */
+    ready(): Promise<void> {
+        if (!this.reading) {
+            this.reading = this.read().catch((error) => {
+                this.reading = undefined;
+                throw error;
+            });
+        }
+        return this.reading;
     }
+
+    private async read(): Promise<void> {
+        this.options = normalize(await this.storage.loadData(this.file));
+    }
+
 
     get(): TemplateOptions {
         return { ...this.options };
     }
 
     async save(options: TemplateOptions): Promise<void> {
+        await this.ready();
         this.options = normalize(options);
         await this.storage.saveData(this.file, this.options);
     }
 }
+
 
 /** The file is user-editable and may predate an option, so every field is checked. */
 function normalize(value: any): TemplateOptions {
