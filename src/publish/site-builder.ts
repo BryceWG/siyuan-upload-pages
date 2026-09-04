@@ -87,11 +87,16 @@ export async function buildSinglePageSite(docId: string, options: BuildOptions):
     const holder = document.createElement("div");
     holder.innerHTML = main.content;
 
+    // The kernel's own footnote conversion follows references recursively across
+    // documents, so its definitions carry the references of the referenced
+    // documents as well. They are dropped unconditionally and inclusion is
+    // decided here instead, exactly one level deep.
+    dropFootnotes(holder);
+
     if (options.includeRefs) {
         await appendReferencedDocs(holder, docId, warnings);
-    } else {
-        dropFootnotes(holder);
     }
+
 
 
     sanitize(holder);
@@ -218,18 +223,20 @@ const SIYUAN_BLOCK_HREF = "siyuan://blocks/";
 const FOOTNOTES = ".footnotes-defs-div";
 
 /** Everything that is not the body of the published document itself. */
-const REFERENCED_PARTS = `section.sp-doc, ${FOOTNOTES}`;
+const REFERENCED_PARTS = "section.sp-doc";
 
 /**
  * `exportPreviewHTML` turns every reference in the body into a footnote and
- * appends the referenced content at the end of the page, which is a second
- * source of included documents next to `appendReferencedDocs`. Dropping both
- * the definitions and the markers is what "do not include them" means for it.
+ * appends the referenced content at the end of the page — recursively, so a
+ * reference inside a referenced document brings in a third document. Dropping
+ * the definitions and the markers leaves inclusion entirely to
+ * `appendReferencedDocs`, which follows exactly one level.
  */
 function dropFootnotes(root: HTMLElement): void {
     root.querySelectorAll(FOOTNOTES).forEach((node) => node.remove());
     root.querySelectorAll(".footnotes-ref").forEach((node) => node.remove());
 }
+
 
 
 interface RefSeed {
@@ -246,15 +253,20 @@ interface RefSeed {
  */
 async function appendReferencedDocs(root: HTMLElement, docId: string, warnings: string[]): Promise<void> {
     const seeds = collectRefSeeds(root);
-    if (seeds.length === 0) {
-        return;
-    }
-
     const roots = await resolveRootIds([...new Set(seeds.map((seed) => seed.blockId))], warnings);
     const wanted: string[] = [];
     for (const seed of seeds) {
         const target = roots.get(seed.blockId);
         if (target && target !== docId && !wanted.includes(target)) {
+            wanted.push(target);
+        }
+    }
+
+    // Under the footnote block reference modes the kernel replaces every
+    // reference with a marker, leaving no anchor in the DOM for `collectRefSeeds`
+    // to find. The index knows them regardless of the export settings.
+    for (const target of await queryReferencedDocs(docId, warnings)) {
+        if (target !== docId && !wanted.includes(target)) {
             wanted.push(target);
         }
     }
@@ -279,6 +291,7 @@ async function appendReferencedDocs(root: HTMLElement, docId: string, warnings: 
         }
     }
 }
+
 
 /** One pass over the tree, so the sections keep the order of the references. */
 function collectRefSeeds(root: HTMLElement): RefSeed[] {
@@ -342,6 +355,23 @@ async function resolveRootIds(blockIds: string[], warnings: string[]): Promise<M
     return roots;
 }
 
+/** Documents referenced by the published document itself, straight from the index. */
+async function queryReferencedDocs(docId: string, warnings: string[]): Promise<string[]> {
+    if (!BLOCK_ID.test(docId)) {
+        return [];
+    }
+
+    const response = await sql(`SELECT DISTINCT def_block_root_id FROM refs WHERE root_id = '${docId}'`);
+    if (!response.ok || !Array.isArray(response.data)) {
+        warnings.push(`引用关系查询失败: ${response.raw.msg || "query/sql failed"}`);
+        return [];
+    }
+
+    return response.data
+        .map((row) => String(row?.def_block_root_id ?? ""))
+        .filter((id) => BLOCK_ID.test(id));
+}
+
 function buildDocSection(docId: string, doc: PreviewHTMLResponse): HTMLElement {
     const section = document.createElement("section");
     section.className = "sp-doc";
@@ -353,10 +383,14 @@ function buildDocSection(docId: string, doc: PreviewHTMLResponse): HTMLElement {
 
     const body = document.createElement("div");
     body.innerHTML = doc.content;
+    // This document's own references are the second level; its content is
+    // included, the content it points at is not.
+    dropFootnotes(body);
 
     section.append(heading, ...[...body.childNodes]);
     return section;
 }
+
 
 /** Turns the stashed references into links to the section that was appended. */
 function linkIncludedDocs(root: HTMLElement): void {
@@ -394,9 +428,9 @@ interface TocEntry {
  * A static table of contents: anchor ids are assigned by position so that two
  * exports of an unchanged document produce the same page, and every entry is a
  * plain `<a href="#...">` — no script on the published page. The headings of
- * the included documents (own sections plus the footnote definitions the kernel
- * appends for every reference) sit behind a separator, mirroring the article.
+ * the included documents sit behind a separator, mirroring the article.
  */
+
 function buildToc(root: HTMLElement, options: BuildOptions): string {
     const entries: TocEntry[] = [];
     let counter = 0;
@@ -429,10 +463,8 @@ function buildToc(root: HTMLElement, options: BuildOptions): string {
                 add(heading, Math.min(6, headingLevel(heading) + 1));
             });
         });
-        root.querySelectorAll<HTMLElement>(`${FOOTNOTES} [data-type='NodeHeading']`).forEach((heading) => {
-            add(heading, headingLevel(heading));
-        });
     }
+
 
 
     if (entries.length === 0) {
