@@ -94,14 +94,22 @@ export async function buildSinglePageSite(
     // documents, so its definitions carry the references of the referenced
     // documents as well. They are dropped unconditionally and inclusion is
     // decided here instead, exactly one level deep.
-    dropFootnotes(holder);
+    const footnoteTargets = options.includeRefs
+        ? await resolveFootnoteTargets(holder, warnings)
+        : new Map<string, string>();
+    dropFootnoteDefs(holder);
 
+    let included = new Set<string>();
     if (options.includeRefs) {
-        await appendReferencedDocs(holder, docId, warnings);
+        included = await appendReferencedDocs(holder, docId, warnings);
+    } else {
+        dropFootnoteMarkers(holder);
     }
 
     sanitize(holder);
     linkIncludedDocs(holder);
+    linkFootnoteRefs(holder, footnoteTargets, included);
+
     stripSpriteIcons(holder);
     await renderMath(holder, warnings);
     await highlightCode(holder, warnings);
@@ -227,13 +235,93 @@ const REFERENCED_PARTS = "section.sp-doc";
 /**
  * `exportPreviewHTML` turns every reference in the body into a footnote and
  * appends the referenced content at the end of the page — recursively, so a
- * reference inside a referenced document brings in a third document. Dropping
- * the definitions and the markers leaves inclusion entirely to
- * `appendReferencedDocs`, which follows exactly one level.
+ * reference inside a referenced document brings in a third document. The
+ * definitions are therefore always dropped and inclusion is left to
+ * `appendReferencedDocs`, which follows exactly one level; the markers survive
+ * until `linkFootnoteRefs` knows which documents made it into the page.
  */
-function dropFootnotes(root: HTMLElement): void {
+function dropFootnoteDefs(root: HTMLElement): void {
     root.querySelectorAll(FOOTNOTES).forEach((node) => node.remove());
+}
+
+/** The `<sup>` markers the kernel leaves in the body for every footnote. */
+function dropFootnoteMarkers(root: HTMLElement): void {
     root.querySelectorAll(".footnotes-ref").forEach((node) => node.remove());
+}
+
+function dropFootnotes(root: HTMLElement): void {
+    dropFootnoteDefs(root);
+    dropFootnoteMarkers(root);
+}
+
+/**
+ * Maps each footnote definition to the document it came from, so the markers in
+ * the body can link to the section that document gets appended as. Must run
+ * before `dropFootnoteDefs`.
+ *
+ * A definition anchors inside the first block of its target. For a document
+ * reference that block is the title heading the export mints on the fly — an id
+ * that no query resolves — so the blocks that follow it serve as fallbacks.
+ */
+async function resolveFootnoteTargets(
+    root: HTMLElement,
+    warnings: string[]
+): Promise<Map<string, string>> {
+    const candidates = new Map<string, string[]>();
+    root.querySelectorAll<HTMLElement>(`${FOOTNOTES} [id^="footnotes-def-"]`).forEach((def) => {
+        const host = def.closest<HTMLElement>("[data-node-id]") ?? def;
+        const ids: string[] = [];
+        for (
+            let node: Element | null = host;
+            node && ids.length < 4;
+            node = node.nextElementSibling
+        ) {
+            const id = node.getAttribute("data-node-id") ?? "";
+            if (BLOCK_ID.test(id)) {
+                ids.push(id);
+            }
+        }
+        if (ids.length > 0) {
+            candidates.set(def.id, ids);
+        }
+    });
+
+    if (candidates.size === 0) {
+        return new Map();
+    }
+
+    const roots = await resolveRootIds([...new Set([...candidates.values()].flat())], warnings);
+    const targets = new Map<string, string>();
+    for (const [defId, ids] of candidates) {
+        const target = ids.map((id) => roots.get(id)).find((value) => !!value);
+        if (target) {
+            targets.set(defId, target);
+        }
+    }
+    return targets;
+}
+
+/**
+ * Turns the footnote markers into links to the appended sections. Markers whose
+ * document is not part of the page — a reference to a block of the published
+ * document itself, or one that failed to export — are dropped.
+ */
+function linkFootnoteRefs(
+    root: HTMLElement,
+    targets: Map<string, string>,
+    included: Set<string>
+): void {
+    root.querySelectorAll<HTMLElement>(".footnotes-ref").forEach((marker) => {
+        const link = marker.querySelector("a");
+        const defId = (link?.getAttribute("href") ?? "").replace(/^#/, "");
+        const target = targets.get(defId);
+        if (!link || !target || !included.has(target)) {
+            marker.remove();
+            return;
+        }
+        link.setAttribute("href", `#${docAnchor(target)}`);
+        link.classList.add("sp-ref");
+    });
 }
 
 interface RefSeed {
@@ -252,7 +340,7 @@ async function appendReferencedDocs(
     root: HTMLElement,
     docId: string,
     warnings: string[]
-): Promise<void> {
+): Promise<Set<string>> {
     const seeds = collectRefSeeds(root);
     const roots = await resolveRootIds([...new Set(seeds.map((seed) => seed.blockId))], warnings);
     const wanted: string[] = [];
@@ -291,6 +379,8 @@ async function appendReferencedDocs(
             seed.anchor.setAttribute("data-sp-doc", target);
         }
     }
+
+    return included;
 }
 
 /** One pass over the tree, so the sections keep the order of the references. */
