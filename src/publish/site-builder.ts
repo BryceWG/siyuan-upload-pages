@@ -84,6 +84,13 @@ img { max-width: 100%; }
     .sp-toc { order: 1; position: static; flex: none; width: 100%; max-height: none;
         border-left: 0; padding-left: 0; }
 }
+
+@media (max-width: 600px) {
+    .sp-shell { width: 100%; gap: 1rem; padding: 1rem .75rem 3rem; }
+    .sp-page { width: 100%; max-width: none; }
+    .sp-title { font-size: 1.6em; margin-bottom: 1rem; }
+    .protyle-wysiwyg { padding-left: 0; padding-right: 0; }
+}
 `;
 
 export async function buildSinglePageSite(
