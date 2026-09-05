@@ -1,6 +1,6 @@
 {
   "name": "siyuan-upload-pages",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "description": "PaperKite - publish a SiYuan document as a self-contained static page",
   "repository": "https://github.com/BryceWG/siyuan-upload-pages",

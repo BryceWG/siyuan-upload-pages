@@ -2,7 +2,7 @@
   "name": "siyuan-upload-pages",
   "author": "Bryce",
   "url": "https://github.com/BryceWG/siyuan-upload-pages",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "minAppVersion": "3.8.0",
 
   "kernels": ["all"],
