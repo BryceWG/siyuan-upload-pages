@@ -20,6 +20,10 @@ export interface PublishOptionsText {
     tocDesc: string;
     tocIncludeRefs: string;
     tocIncludeRefsDesc: string;
+    passwordEnabled: string;
+    passwordDesc: string;
+    passwordPlaceholder: string;
+    passwordEmpty: string;
     publish: string;
 }
 
@@ -67,6 +71,18 @@ export function openPublishOptionsDialog(
             text.contentWidthDesc,
             initial.contentWidth
         );
+        const passwordEnabled = switchRow(
+            text.passwordEnabled,
+            text.passwordDesc,
+            initial.passwordEnabled
+        );
+        const password = textRow(text.passwordPlaceholder, "", "");
+        password.input.type = "password";
+        const syncPassword = (): void => {
+            password.row.style.display = passwordEnabled.input.checked ? "" : "none";
+        };
+        passwordEnabled.input.addEventListener("change", syncPassword);
+        syncPassword();
 
         // Listing the referenced documents only makes sense once there is both
         // a table of contents and referenced documents in the page.
@@ -79,14 +95,29 @@ export function openPublishOptionsDialog(
         includeRefs.input.addEventListener("change", syncTocRefs);
         syncTocRefs();
 
-        holder.append(addTitle.row, contentWidth.row, includeRefs.row, toc.row, tocIncludeRefs.row);
+        holder.append(
+            addTitle.row,
+            contentWidth.row,
+            includeRefs.row,
+            toc.row,
+            tocIncludeRefs.row,
+            passwordEnabled.row,
+            password.row
+        );
 
         const buttons = dialog.element.querySelectorAll(".b3-dialog__action .b3-button");
         buttons[0].addEventListener("click", () => {
             finish(null);
             dialog.destroy();
         });
-        buttons[1].addEventListener("click", () => {
+        buttons[1].addEventListener("click", async () => {
+            const plainPassword = password.input.value;
+            if (passwordEnabled.input.checked && !plainPassword) {
+                password.input.placeholder = text.passwordEmpty;
+                password.input.focus();
+                return;
+            }
+            const passwordHash = passwordEnabled.input.checked ? await sha256(plainPassword) : "";
             finish({
                 addTitle: addTitle.input.checked,
                 contentWidth: contentWidth.input.value.trim(),
@@ -94,10 +125,17 @@ export function openPublishOptionsDialog(
                 tocIncludeRefs:
                     toc.input.checked && includeRefs.input.checked && tocIncludeRefs.input.checked,
                 includeRefs: includeRefs.input.checked,
+                passwordEnabled: passwordEnabled.input.checked,
+                passwordHash,
             });
             dialog.destroy();
         });
     });
+}
+
+async function sha256(value: string): Promise<string> {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+    return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 interface Row<T extends HTMLElement> {

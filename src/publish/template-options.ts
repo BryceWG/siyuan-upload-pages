@@ -18,6 +18,8 @@ export interface TemplateOptions {
     tocIncludeRefs: boolean;
     /** Append the documents referenced by the body as sections of the page. */
     includeRefs: boolean;
+    passwordEnabled: boolean;
+    passwordHash: string;
 }
 
 export const DEFAULT_TEMPLATE_OPTIONS: TemplateOptions = {
@@ -26,6 +28,8 @@ export const DEFAULT_TEMPLATE_OPTIONS: TemplateOptions = {
     toc: false,
     tocIncludeRefs: false,
     includeRefs: false,
+    passwordEnabled: false,
+    passwordHash: "",
 };
 
 /** Only the two data methods the store needs, so it does not depend on the Plugin type. */
@@ -84,5 +88,10 @@ function normalize(value: any): TemplateOptions {
         toc: flag("toc"),
         tocIncludeRefs: flag("tocIncludeRefs"),
         includeRefs: flag("includeRefs"),
+        passwordEnabled: flag("passwordEnabled"),
+        passwordHash:
+            typeof source.passwordHash === "string" && /^[a-f0-9]{64}$/.test(source.passwordHash)
+                ? source.passwordHash
+                : "",
     };
 }

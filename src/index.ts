@@ -402,6 +402,9 @@ export default class PublishPlugin extends Plugin {
                 slug: this.slugFor(provider, docId),
                 tocLabel: this.i18n.tocLabel,
                 iconDir: `/plugins/${this.name}/asset`,
+                unlockPrompt: this.i18n.unlockPrompt,
+                unlockButton: this.i18n.unlockButton,
+                unlockError: this.i18n.unlockError,
             });
 
             if (site.warnings.length > 0) {
@@ -469,6 +472,10 @@ export default class PublishPlugin extends Plugin {
                 tocDesc: this.i18n.optionTocDesc,
                 tocIncludeRefs: this.i18n.optionTocIncludeRefs,
                 tocIncludeRefsDesc: this.i18n.optionTocIncludeRefsDesc,
+                passwordEnabled: this.i18n.optionPasswordEnabled,
+                passwordDesc: this.i18n.optionPasswordDesc,
+                passwordPlaceholder: this.i18n.optionPasswordPlaceholder,
+                passwordEmpty: this.i18n.optionPasswordEmpty,
                 publish: this.i18n.optionsPublish,
             },
             this.templateOptions.get()

@@ -68,5 +68,12 @@
   "optionTocDesc": "纯静态锚点目录，窄屏时移到正文上方",
   "optionTocIncludeRefs": "目录中包含被引用的文档",
   "optionTocIncludeRefsDesc": "需要同时开启目录导航与包含被引用文档",
+  "optionPasswordEnabled": "查看页面前需要密码",
+  "optionPasswordDesc": "浏览器端的轻量访问控制",
+  "optionPasswordPlaceholder": "请输入密码",
+  "optionPasswordEmpty": "请输入密码后再发布",
+  "unlockPrompt": "请输入密码查看此页面",
+  "unlockButton": "解锁",
+  "unlockError": "密码错误",
   "tocLabel": "目录"
 }

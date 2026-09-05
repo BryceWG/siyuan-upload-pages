@@ -68,5 +68,12 @@
   "optionTocDesc": "Static anchor links only; moves above the article on narrow screens",
   "optionTocIncludeRefs": "List the included referenced documents too",
   "optionTocIncludeRefsDesc": "Needs both the table of contents and the included referenced documents",
+  "optionPasswordEnabled": "Require a password to view this page",
+  "optionPasswordDesc": "A lightweight browser-side access gate",
+  "optionPasswordPlaceholder": "Password",
+  "optionPasswordEmpty": "Enter a password before publishing",
+  "unlockPrompt": "Enter password to view this page",
+  "unlockButton": "Unlock",
+  "unlockError": "Incorrect password",
   "tocLabel": "Contents"
 }

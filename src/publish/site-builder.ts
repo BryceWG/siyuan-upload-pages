@@ -33,6 +33,9 @@ export interface BuildOptions extends TemplateOptions {
     tocLabel: string;
     /** Kernel folder holding the page icon files, e.g. `/plugins/<plugin>/asset`. */
     iconDir: string;
+    unlockPrompt?: string;
+    unlockButton?: string;
+    unlockError?: string;
 }
 
 const PAGE_STYLE = `
@@ -94,8 +97,21 @@ img { max-width: 100%; }
     .sp-toc__summary::-webkit-details-marker { display: none; }
     .sp-toc__summary::after { content: "＋"; float: right; }
     .sp-toc[open] .sp-toc__summary::after { content: "－"; }
-    .sp-toc nav { padding-bottom: .65rem; }
+.sp-toc nav { padding-bottom: .65rem; }
 }
+.sp-lock { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center;
+    padding: 1.5rem; box-sizing: border-box; background: var(--b3-theme-background); }
+.sp-lock__card { width: min(100%, 24rem); padding: 2rem; box-sizing: border-box; border: 1px solid var(--b3-border-color);
+    border-radius: 12px; background: var(--b3-theme-surface); box-shadow: 0 12px 40px rgba(0,0,0,.12); }
+.sp-lock__title { margin: 0 0 1.25rem; color: var(--b3-theme-on-background); font-size: 1.15rem; font-weight: 600; }
+.sp-lock__field { display: block; width: 100%; box-sizing: border-box; margin: 0 0 .75rem; padding: .7rem .8rem;
+    border: 1px solid var(--b3-border-color); border-radius: 6px; background: var(--b3-theme-background);
+    color: var(--b3-theme-on-background); font: inherit; outline: none; }
+.sp-lock__field:focus { border-color: var(--b3-theme-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--b3-theme-primary) 20%, transparent); }
+.sp-lock__button { width: 100%; padding: .7rem .8rem; border: 0; border-radius: 6px; background: var(--b3-theme-primary);
+    color: var(--b3-theme-on-primary); font: inherit; cursor: pointer; }
+.sp-lock__button:hover { filter: brightness(1.08); }
+.sp-lock__error { min-height: 1.3em; margin-top: .65rem; color: var(--b3-theme-error); font-size: .85rem; }
 `;
 
 export async function buildSinglePageSite(
@@ -227,6 +243,8 @@ function contentFingerprint(
         `addTitle=${options.addTitle}`,
         `width=${cssWidth(options.contentWidth)}`,
         `includeRefs=${options.includeRefs}`,
+        `passwordEnabled=${options.passwordEnabled}`,
+        `passwordHash=${options.passwordHash}`,
         `themeMode=${siyuanThemeMode()}`,
         `theme=${siyuanAppearance().light}/${siyuanAppearance().dark}`,
         `toc=${toc}`,
@@ -717,6 +735,12 @@ function renderPage(
         .replace(/__SHELL_WIDTH__/g, toc ? `calc(${width} + 17.5rem)` : width)
         .replace(/__WIDTH__/g, width);
 
+    const protection = options.passwordEnabled
+        ? `<div id="sp-lock" class="sp-lock"><form id="sp-lock-form" class="sp-lock__card"><h1 class="sp-lock__title">${escapeHtml(options.unlockPrompt || "Password")}</h1><input id="sp-lock-input" class="sp-lock__field" type="password" autocomplete="current-password" autofocus><button class="sp-lock__button" type="submit">${escapeHtml(options.unlockButton || "Unlock")}</button><div id="sp-lock-error" class="sp-lock__error" role="alert"></div></form></div>`
+        : "";
+    const script = options.passwordEnabled
+        ? `<script>(function(){const h="${escapeAttr(options.passwordHash)}";const k="sp-unlock-"+h;const unlock=function(){const lock=document.getElementById("sp-lock");if(lock)lock.remove()};try{if(localStorage.getItem(k)==="1"){unlock();return}}catch(_){}const f=document.getElementById("sp-lock-form");const i=document.getElementById("sp-lock-input");const e=document.getElementById("sp-lock-error");f.addEventListener("submit",async function(x){x.preventDefault();const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(i.value));const v=[...new Uint8Array(b)].map(function(n){return n.toString(16).padStart(2,"0")}).join("");if(v===h){try{localStorage.setItem(k,"1")}catch(_){}unlock()}else{e.textContent="${escapeAttr(options.unlockError || "Incorrect password")}";i.select()}})})();</script>`
+        : "";
     return `<!DOCTYPE html>
 <html lang="${escapeAttr(siyuanLang())}" data-theme-mode="${themeMode}" data-light-theme="${escapeAttr(appearance.light)}" data-dark-theme="${escapeAttr(appearance.dark)}">
 <head>
@@ -727,6 +751,7 @@ ${links}
     <style>${style}</style>
 </head>
 <body>
+    ${protection}
     <div class="sp-shell">
         <main class="sp-page">
         ${heading}
@@ -737,6 +762,7 @@ ${body}
 ${toc}
     </div>
 </body>
+${script}
 </html>
 `;
 }
