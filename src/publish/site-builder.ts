@@ -46,6 +46,10 @@ body { background-color: var(--b3-theme-background); color: var(--b3-theme-on-ba
 .protyle-wysiwyg [data-node-id] { cursor: auto; }
 .protyle-wysiwyg .protyle-action { user-select: none; }
 img { max-width: 100%; }
+.protyle-wysiwyg table { max-width: 100%; }
+.protyle-wysiwyg pre { max-width: 100%; overflow-x: auto; }
+.protyle-wysiwyg pre code { font-family: var(--b3-font-family-code, monospace); }
+[data-type="NodeHTMLBlock"] { overflow-x: auto; }
 [id] { scroll-margin-top: 1.5rem; }
 .sp-toc { order: 2; flex: 0 0 15rem; position: sticky; top: 2rem; align-self: flex-start;
     max-height: calc(100vh - 4rem); overflow: auto; font-size: 13px; line-height: 1.6;
@@ -127,7 +131,15 @@ export async function buildSinglePageSite(
     const slug = options.slug;
     const canonical = canonicalHtml(holder);
 
-    const html = renderPage(title, holder.innerHTML, toc, iconLinks, stylesheets, options);
+    const html = renderPage(
+        title,
+        holder.innerHTML,
+        toc,
+        iconLinks,
+        stylesheets,
+        options,
+        themeVariables()
+    );
 
     const page = `/${slug}/index.html`;
     files.set(page, {
@@ -203,6 +215,8 @@ function contentFingerprint(
         `addTitle=${options.addTitle}`,
         `width=${cssWidth(options.contentWidth)}`,
         `includeRefs=${options.includeRefs}`,
+        `themeMode=${siyuanThemeMode()}`,
+        `theme=${siyuanAppearance().light}/${siyuanAppearance().dark}`,
         `toc=${toc}`,
         `style=${PAGE_STYLE}`,
         `dom=${canonical}`,
@@ -663,23 +677,36 @@ function renderPage(
     toc: string,
     icons: string,
     stylesheets: string[],
-    options: BuildOptions
+    options: BuildOptions,
+    variables: string
 ): string {
     const appearance = siyuanAppearance();
+    const themeMode = siyuanThemeMode();
+    const selectedTheme = themeMode === "dark" ? appearance.dark : appearance.light;
+    const selectedCodeStyle =
+        themeMode === "dark" ? appearance.codeStyle.dark : appearance.codeStyle.light;
     const links = stylesheets
-        .map((href) => `    <link rel="stylesheet" href="${escapeAttr(href)}">`)
+        .filter((href) =>
+            href.startsWith("/appearance/themes/")
+                ? href === `/appearance/themes/${selectedTheme}/theme.css`
+                : href.startsWith("/stage/protyle/js/highlight.js/styles/")
+                  ? href === `/stage/protyle/js/highlight.js/styles/${selectedCodeStyle}.min.css`
+                  : true
+        )
+        .map((href) => {
+            return `    <link rel="stylesheet" href="${escapeAttr(href)}">`;
+        })
         .join("\n");
     const icon = icons ? `\n${icons}` : "";
 
     const heading = options.addTitle ? `<h1 class="sp-title">${escapeHtml(title)}</h1>` : "";
     const width = cssWidth(options.contentWidth);
-    const style = PAGE_STYLE.replace(
-        /__SHELL_WIDTH__/g,
-        toc ? `calc(${width} + 17.5rem)` : width
-    ).replace(/__WIDTH__/g, width);
+    const style = `${variables}\n${PAGE_STYLE}`
+        .replace(/__SHELL_WIDTH__/g, toc ? `calc(${width} + 17.5rem)` : width)
+        .replace(/__WIDTH__/g, width);
 
     return `<!DOCTYPE html>
-<html lang="${escapeAttr(siyuanLang())}" data-theme-mode="light" data-light-theme="${escapeAttr(appearance.light)}" data-dark-theme="${escapeAttr(appearance.dark)}">
+<html lang="${escapeAttr(siyuanLang())}" data-theme-mode="${themeMode}" data-light-theme="${escapeAttr(appearance.light)}" data-dark-theme="${escapeAttr(appearance.dark)}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -700,6 +727,20 @@ ${toc}
 </body>
 </html>
 `;
+}
+
+/** Preserve the active SiYuan theme variables even when its theme CSS is not portable. */
+function themeVariables(): string {
+    const computed = getComputedStyle(document.documentElement);
+    const declarations: string[] = [];
+    for (let index = 0; index < computed.length; index += 1) {
+        const name = computed.item(index);
+        if (name.startsWith("--b3-") || name.startsWith("--custom-")) {
+            const value = computed.getPropertyValue(name).trim();
+            if (value) declarations.push(`${name}: ${value};`);
+        }
+    }
+    return declarations.length ? `:root { ${declarations.join(" ")} }` : "";
 }
 
 /** The width lands inside a `<style>` block, so only a plain CSS length passes. */
@@ -970,7 +1011,7 @@ function toWorkspacePath(raw: string): string | null {
     if (withoutQuery.includes("/../")) {
         return null;
     }
-    return /^\/(assets|emojis)\//.test(withoutQuery) ? decodeURI(withoutQuery) : null;
+    return /^\/(assets|emojis|plugins)\//.test(withoutQuery) ? decodeURI(withoutQuery) : null;
 }
 
 // --------------------------------------------------------------- stylesheets
@@ -988,7 +1029,9 @@ async function collectStylesheets(
         "/stage/build/export/base.css",
         `/appearance/themes/${appearance.light}/theme.css`,
         "/stage/protyle/js/katex/katex.min.css",
-        `/stage/protyle/js/highlight.js/styles/${appearance.codeStyle}.min.css`,
+        `/stage/protyle/js/highlight.js/styles/${appearance.codeStyle.light}.min.css`,
+        `/stage/protyle/js/highlight.js/styles/${appearance.codeStyle.dark}.min.css`,
+        `/appearance/themes/${appearance.dark}/theme.css`,
     ];
 
     const included: string[] = [];
@@ -1084,13 +1127,37 @@ async function addWorkspaceFile(
 
 // -------------------------------------------------------------------- misc
 
-function siyuanAppearance(): { light: string; dark: string; codeStyle: string } {
+function siyuanAppearance(): {
+    light: string;
+    dark: string;
+    codeStyle: { light: string; dark: string };
+} {
     const appearance = (window as any).siyuan?.config?.appearance ?? {};
     return {
         light: appearance.themeLight || "daylight",
         dark: appearance.themeDark || "midnight",
-        codeStyle: appearance.codeBlockThemeLight || "github",
+        codeStyle: {
+            light: appearance.codeBlockThemeLight || "github",
+            dark: appearance.codeBlockThemeDark || appearance.codeBlockThemeLight || "github",
+        },
     };
+}
+
+function siyuanThemeMode(): "light" | "dark" {
+    const root = document.documentElement;
+    const body = document.body;
+    if (
+        root.getAttribute("data-theme-mode") === "dark" ||
+        body?.classList.contains("b3-theme-dark") ||
+        body?.classList.contains("theme-dark")
+    ) {
+        return "dark";
+    }
+    const appearance = (window as any).siyuan?.config?.appearance ?? {};
+    if (!appearance.modeOS) {
+        return appearance.mode === 1 || appearance.mode === "1" ? "dark" : "light";
+    }
+    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
 const siyuanLang = (): string => (window as any).siyuan?.config?.lang?.replace("_", "-") || "zh-CN";
