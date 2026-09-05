@@ -69,6 +69,10 @@ img { max-width: 100%; }
 .protyle-wysiwyg .katex-display > .katex > .katex-html { display: block; position: relative; }
 .protyle-wysiwyg .katex-display > .katex > .katex-html::before { content: none; }
 .protyle-wysiwyg .katex-display > .katex > .katex-html > .tag { position: absolute; right: 0; margin: 0; }
+/* Keep exported code on its original lines; the editor stylesheet may make
+   inline code rules win over highlight.js' block layout. */
+.protyle-wysiwyg .code-block { overflow-x: auto; }
+.protyle-wysiwyg .code-block .hljs { display: block; white-space: pre; overflow-x: auto; }
 
 @media (max-width: 1100px) {
     .sp-shell { flex-direction: column; gap: 1.5rem; max-width: __WIDTH__; }
@@ -857,7 +861,7 @@ function unescapeHtml(value: string): string {
 // --------------------------------------------------------------------- code
 
 async function highlightCode(root: HTMLElement, warnings: string[]): Promise<void> {
-    const blocks = root.querySelectorAll<HTMLElement>(".code-block .hljs");
+    const blocks = root.querySelectorAll<HTMLElement>(".code-block .hljs, .code-block pre code");
     if (blocks.length === 0) {
         return;
     }
@@ -872,13 +876,15 @@ async function highlightCode(root: HTMLElement, warnings: string[]): Promise<voi
     }
 
     blocks.forEach((block) => {
-        const language = block.parentElement?.getAttribute("data-subtype") ?? "";
+        const language =
+            block.closest<HTMLElement>("[data-subtype]")?.getAttribute("data-subtype") ?? "";
         const code = block.textContent ?? "";
         try {
             const result = hljs.getLanguage?.(language)
                 ? hljs.highlight(code, { language, ignoreIllegals: true })
                 : hljs.highlightAuto(code);
             block.innerHTML = result.value;
+            block.classList.add("hljs");
         } catch (error) {
             warnings.push(`代码高亮失败：${String(error)}`);
         }
