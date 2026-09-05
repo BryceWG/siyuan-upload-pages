@@ -953,7 +953,15 @@ async function loadGlobalScript<T>(globalName: string, url: string): Promise<T |
 
 // ------------------------------------------------------------------- assets
 
-const ASSET_ATTRIBUTES = ["src", "href", "poster", "data-src", "xlink:href"];
+const ASSET_ATTRIBUTES = [
+    "src",
+    "href",
+    "poster",
+    "data-src",
+    "data-image",
+    "data-background-image",
+    "xlink:href",
+];
 
 /**
  * Pulls every `assets/` and `emojis/` file the page references out of the
@@ -967,7 +975,7 @@ async function collectReferencedAssets(
 ): Promise<void> {
     const wanted = new Set<string>();
 
-    root.querySelectorAll<HTMLElement>("*").forEach((element) => {
+    [root, ...root.querySelectorAll<HTMLElement>("*")].forEach((element) => {
         for (const name of ASSET_ATTRIBUTES) {
             const value = element.getAttribute(name);
             const sitePath = value ? toWorkspacePath(value) : null;
@@ -977,6 +985,21 @@ async function collectReferencedAssets(
                 // `assets/foo.png` has to become root-absolute.
                 element.setAttribute(name, encodeURI(sitePath));
             }
+        }
+
+        const srcset = element.getAttribute("srcset");
+        if (srcset) {
+            const rewritten = srcset
+                .split(",")
+                .map((candidate) => {
+                    const [url, descriptor] = candidate.trim().split(/\s+/, 2);
+                    const sitePath = toWorkspacePath(url);
+                    if (!sitePath) return candidate.trim();
+                    wanted.add(sitePath);
+                    return `${encodeURI(sitePath)}${descriptor ? ` ${descriptor}` : ""}`;
+                })
+                .join(", ");
+            element.setAttribute("srcset", rewritten);
         }
 
         const style = element.getAttribute("style");
@@ -992,6 +1015,13 @@ async function collectReferencedAssets(
             if (rewritten !== style) {
                 element.setAttribute("style", rewritten);
             }
+        }
+    });
+
+    root.querySelectorAll<HTMLStyleElement>("style").forEach((styleElement) => {
+        for (const url of extractCssUrls(styleElement.textContent ?? "")) {
+            const sitePath = toWorkspacePath(url);
+            if (sitePath) wanted.add(sitePath);
         }
     });
 
@@ -1011,7 +1041,9 @@ function toWorkspacePath(raw: string): string | null {
     if (withoutQuery.includes("/../")) {
         return null;
     }
-    return /^\/(assets|emojis|plugins)\//.test(withoutQuery) ? decodeURI(withoutQuery) : null;
+    return /^\/(assets|emojis|plugins|appearance|stage)\//.test(withoutQuery)
+        ? decodeURI(withoutQuery)
+        : null;
 }
 
 // --------------------------------------------------------------- stylesheets
